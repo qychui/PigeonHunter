@@ -8,6 +8,10 @@ namespace PigeonHunt
 {
     public class UIController : UdonSharpBehaviour
     {
+        [Header("Title Screen")]
+        public GameObject[] modeOptionArrows;
+        public Material[] topScoreDigitMaterials;
+
         [Header("GunBar UI")]
         public int weaponType = 0;
         public int bulletMaxCount = 3;
@@ -43,7 +47,7 @@ namespace PigeonHunt
         public SoundManager soundManager;
         [Tooltip("十只鸽子的遮罩对象，对应出现的鸽子会闪烁。")]
         public GameObject[] pigeonMaskObjects;
-        public float maskDelay = 0.4f; //遮罩闪烁的时间间隔，isActivite = true和false的交替间隔
+        public float maskDelay = 0.4f;
 
         [Header("Score UI")]
         public int scoreCurrent = 0;
@@ -76,6 +80,7 @@ namespace PigeonHunt
         [Min(0f)]
         public float roundDisplayTime = 2f;
 
+        [UdonSynced] private int _topScoreValue;
         private int _pigeonQuota = 10;
         private int _hitCountThisRound;
         private int _primaryMaskIndex = -1;

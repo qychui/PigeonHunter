@@ -1,5 +1,7 @@
-﻿using UdonSharp;
+using UdonSharp;
 using UnityEngine;
+using UnityEngine.Serialization;
+using UnityEngine.UIElements;
 
 namespace PigeonHunt
 {
@@ -7,7 +9,8 @@ namespace PigeonHunt
     {
         None,
         Hit,
-        Miss
+        Miss,
+        EndRound
     }
 
     [AddComponentMenu("PigeonHunt/MainAreaAnimation Controller")]
@@ -31,20 +34,28 @@ namespace PigeonHunt
         [SerializeField] private GameObject roundEnd;
         [SerializeField] private GameObject roundNext;
 
+        [Header("Audio")]
+        [SerializeField] private SoundManager soundManager;
+
         [Header("State Values")]
         [Tooltip("Default idle or standby animation state.")]
         public int idleState = 0;
         public int gameStartState = 1;
         public int hitState = 2;
         public int missState = 3;
-        public int roundEndState = 4;
-        public int roundNextState = 5;
+        public int roundNextState = 4;
 
         [Header("Animation Durations (seconds)")]
         [Min(0f)]
-        [SerializeField] private float gameStartDuration = 0f;
+        [SerializeField] private float gameStartDuration = 7.5f;
         [Min(0f)]
-        [SerializeField] private float gameStartDelay = 0f;
+        [SerializeField] private float gameStartDelay = 2f;
+        [Min(0f)]
+        [SerializeField] private float gameNextDuration = 3f;
+        [Min(0f)]
+        [SerializeField] private float gameNextDelay = 2f;
+        [Min(0f)]
+        [SerializeField] private float playRoundNextAudioDelay = 0f;
 
         [Header("Round Start Movement")]
         [Min(0f)]
@@ -71,53 +82,84 @@ namespace PigeonHunt
         [SerializeField] private float roundStartArcVerticalDistance = 0.18f;
         [Tooltip("Speed multiplier applied to the arc movement (1 = use duration as-is).")]
         [Min(0f)]
-        [SerializeField] private float roundStartArcMoveSpeed = 1f;
+        [SerializeField] private float roundStartArcMoveSpeed = 3f;
         [Tooltip("Additional normalized distance to drop below the baseline near the end of the arc.")]
         [Min(0f)]
-        [SerializeField] private float roundStartArcExtraDropDistance = 0f;
+        [SerializeField] private float roundStartArcExtraDropDistance = 0.1f;
+        [Tooltip("Seconds from arc start before changing dog sorting order.")]
+        [Min(0f)]
+        [SerializeField] private float ArcLayerChangedTime = 0.2f;
+
+        [Header("Round Next Movement")]
+        [Min(0f)]
+        [SerializeField] private float roundNextMoveSpeed = 0.1f;
+        [Min(0f)]
+        [SerializeField] private float roundNextMoveDuration = 0.67f;
+        [Min(0f)]
+        [SerializeField] private float roundNextPauseDuration = 1.33f;
 
         [Header("Hit Movement")]
         [Min(0f)]
-        [SerializeField] private float hitMoveUpDelay = 0f;
+        [SerializeField] private float hitMoveUpDelay = 1f;
         [Min(0f)]
-        [SerializeField] private float hitMoveUpSpeed = 0.08f;
+        [SerializeField] private float hitMoveUpSpeed = 0.52f;
         [Min(0f)]
-        [SerializeField] private float hitMoveUpDuration = 0.45f;
+        [SerializeField] private float hitMoveUpDuration = 0.3f;
         [Min(0f)]
-        [SerializeField] private float hitSlowdownDuration = 0.35f;
+        [SerializeField] private float hitSlowdownDuration = 0.13f;
         [Min(0f)]
-        [SerializeField] private float hitPauseDuration = 0.4f;
+        [SerializeField] private float hitPauseDuration = 0.6f;
         [Min(0f)]
-        [SerializeField] private float hitDownAccelerationDuration = 0.4f;
+        [SerializeField] private float hitDownAccelerationDuration = 0.3f;
         [Min(0f)]
-        [SerializeField] private float hitMoveDownSpeed = 0.08f;
+        [SerializeField] private float hitMoveDownSpeed = 0.46f;
         [Min(0f)]
-        [SerializeField] private float hitMoveDownDuration = 0.55f;
+        [SerializeField] private float hitMoveDownDuration = 0.8f;
         [Min(0f)]
         [SerializeField] private float hitMovementFallbackHeight = 1f;
         [Min(0f)]
-        [SerializeField] private float hitResetDelay = 0f;
+        [SerializeField] private float hitResetDelay = 1.5f;
+        [Tooltip("Horizontal padding percent inside movementArea when placing the hit animation target (0-45).")]
+        [FormerlySerializedAs("hitPositionPaddingRatio")]
+        [Range(0f, 45f)]
+        [SerializeField] private float hitPositionPaddingPercent = 30f;
+        [SerializeField, HideInInspector] private bool hitPaddingPercentMigrated;
+
         [Header("Miss Movement")]
         [Min(0f)]
-        [SerializeField] private float missMoveUpDelay = 0f;
+        [SerializeField] private float missMoveUpDelay = 1f;
         [Min(0f)]
-        [SerializeField] private float missMoveUpSpeed = 0.08f;
+        [SerializeField] private float missMoveUpSpeed = 0.5f;
         [Min(0f)]
-        [SerializeField] private float missMoveUpDuration = 0.45f;
+        [SerializeField] private float missMoveUpDuration = 0.2f;
         [Min(0f)]
-        [SerializeField] private float missSlowdownDuration = 0.35f;
+        [SerializeField] private float missSlowdownDuration = 0.4f;
         [Min(0f)]
         [SerializeField] private float missPauseDuration = 0.4f;
         [Min(0f)]
-        [SerializeField] private float missDownAccelerationDuration = 0.4f;
+        [SerializeField] private float missDownAccelerationDuration = 0.5f;
         [Min(0f)]
-        [SerializeField] private float missMoveDownSpeed = 0.08f;
+        [SerializeField] private float missMoveDownSpeed = 0.2f;
         [Min(0f)]
-        [SerializeField] private float missMoveDownDuration = 0.55f;
+        [SerializeField] private float missMoveDownDuration = 0.8f;
         [Min(0f)]
         [SerializeField] private float missMovementFallbackHeight = 1f;
         [Min(0f)]
-        [SerializeField] private float missResetDelay = 0f;
+        [SerializeField] private float missResetDelay = 2.5f;
+
+        [Header("EndRound Lmao Movement")]
+        [Min(0f)]
+        [SerializeField] private float lmaoMoveUpDelay = 0f;
+        [Min(0f)]
+        [SerializeField] private float lmaoMoveUpSpeed = 0.5f;
+        [Min(0f)]
+        [SerializeField] private float lmaoMoveUpDuration = 0.2f;
+        [Min(0f)]
+        [SerializeField] private float lmaoSlowdownDuration = 0.4f;
+        [Min(0f)]
+        [SerializeField] private float lmaoPauseDuration = 0.4f;
+        [Min(0f)]
+        [SerializeField] private float lmaoResetDelay = 5f;
 
         private int stateParameterHash;
         private int currentState = int.MinValue;
@@ -129,18 +171,27 @@ namespace PigeonHunt
         private const int RoundStartPhaseSecondPause = 3;
         private const int RoundStartPhaseArcMove = 4;
         private const int RoundStartPhaseComplete = 5;
+        private const int RoundNextPhaseMove = 0;
+        private const int RoundNextPhasePause = 1;
+        private const int RoundNextPhaseArcMove = 2;
+        private const int RoundNextPhaseComplete = 3;
 
         private bool roundStartMovementActive;
         private int roundStartMovementPhase = RoundStartPhaseComplete;
         private float roundStartMovementPhaseTimer;
         private Transform roundStartMovementTarget;
         private float roundStartArcElapsed;
-        private bool roundStartArcPeakTriggered;
+        private bool roundStartArcLayerChanged;
         private Vector3 roundStartArcBasePosition;
-        private Vector3 roundStartBasePosition;
-        private Quaternion roundStartBaseRotation;
-        private bool roundStartBaseCached;
         private readonly Vector3[] roundStartMovementAreaCorners = new Vector3[4];
+        private bool roundNextMovementActive;
+        private int roundNextMovementPhase = RoundNextPhaseComplete;
+        private float roundNextMovementPhaseTimer;
+        private Transform roundNextMovementTarget;
+        private float roundNextArcElapsed;
+        private bool roundNextArcLayerChanged;
+        private Vector3 roundNextArcBasePosition;
+        private readonly Vector3[] roundNextMovementAreaCorners = new Vector3[4];
         private const int MovementPhaseMoveUp = 0;
         private const int MovementPhaseSlowdown = 1;
         private const int MovementPhasePause = 2;
@@ -167,14 +218,33 @@ namespace PigeonHunt
         private bool stateResetPending;
         private float stateResetTimer;
         private int stateResetSourceState = int.MinValue;
+        private bool lmaoResetPausePending;
+        private bool movementResetOnComplete;
+        private Canvas dogMainCanvas;
 
-        public float GameStartDuration => Mathf.Max(0f, gameStartDuration);
+        public float GameStartDuration => Mathf.Max(Mathf.Max(0f, gameStartDuration), GetRoundStartMovementSequenceDuration());
         public float GameStartDelay => Mathf.Max(0f, gameStartDelay);
+        public float GameNextDuration => Mathf.Max(Mathf.Max(0f, gameNextDuration), GetRoundNextMovementSequenceDuration());
+        public float GameNextDelay => Mathf.Max(0f, gameNextDelay);
 
         private void Start()
         {
             EnsureInitialized();
-            CacheRoundStartPose();
+        }
+
+        private void OnValidate()
+        {
+            if (!hitPaddingPercentMigrated)
+            {
+                if (hitPositionPaddingPercent > 0f && hitPositionPaddingPercent <= 1f)
+                {
+                    hitPositionPaddingPercent *= 100f;
+                }
+
+                hitPaddingPercentMigrated = true;
+            }
+
+            hitPositionPaddingPercent = Mathf.Clamp(hitPositionPaddingPercent, 0f, 45f);
         }
 
         private void Update()
@@ -182,6 +252,10 @@ namespace PigeonHunt
             if (roundStartMovementActive)
             {
                 UpdateRoundStartMovement();
+            }
+            if (roundNextMovementActive)
+            {
+                UpdateRoundNextMovement();
             }
 
             if (movementRequestPending)
@@ -202,17 +276,130 @@ namespace PigeonHunt
 
         public void PlayGameStartAnimation()
         {
-            ApplyState(gameStartState);
+            PlayGameStartAnimationWithAudio(false);
         }
 
-        public void PlayHitAnimation()
+        public void PlayGameStartAnimationWithAudio(bool useRoundNextAudio)
         {
+            ApplyState(useRoundNextAudio ? roundNextState : gameStartState);
+            if (useRoundNextAudio)
+            {
+                PlayRoundNextSound();
+            }
+            else
+            {
+                PlayRoundStartSound();
+            }
+        }
+
+        public void PlayHitAnimation(float posX)
+        {
+            if (got == null)
+            {
+                RequestMovement(DogMovementType.Hit);
+                return;
+            }
+
+            var currentLocal = got.transform.localPosition;
+            var localX = ResolveHitLocalX(posX);
+            var clampedLocalX = ClampHitLocalXWithPadding(localX);
+            got.transform.localPosition = new Vector3(clampedLocalX, currentLocal.y, currentLocal.z);
+
             RequestMovement(DogMovementType.Hit);
+        }
+
+        private float ResolveHitLocalX(float worldX)
+        {
+            if (got == null)
+            {
+                return worldX;
+            }
+
+            var targetTransform = got.transform;
+            var worldPosition = targetTransform.position;
+            worldPosition.x = worldX;
+
+            if (targetTransform.parent == null)
+            {
+                return worldPosition.x;
+            }
+
+            var localPosition = targetTransform.parent.InverseTransformPoint(worldPosition);
+            return localPosition.x;
+        }
+
+        private float ClampHitLocalXWithPadding(float localX)
+        {
+            if (!TryGetHitMovementAreaLocalXBounds(out float minX, out float maxX, out float width))
+            {
+                return localX;
+            }
+
+            var padding = QychuiUtilities.GetPercentValue(width, hitPositionPaddingPercent);
+            var paddedMinX = minX + padding;
+            var paddedMaxX = maxX - padding;
+            if (paddedMaxX < paddedMinX)
+            {
+                var midpoint = (minX + maxX) * 0.5f;
+                paddedMinX = midpoint;
+                paddedMaxX = midpoint;
+            }
+
+            return Mathf.Clamp(localX, paddedMinX, paddedMaxX);
+        }
+
+        private bool TryGetHitMovementAreaLocalXBounds(out float minX, out float maxX, out float width)
+        {
+            minX = 0f;
+            maxX = 0f;
+            width = 0f;
+
+            var area = movementArea;
+            if (area == null && got != null)
+            {
+                area = got.GetComponent<RectTransform>();
+            }
+
+            if (area == null)
+            {
+                return false;
+            }
+
+            area.GetWorldCorners(movementAreaCorners);
+
+            var parent = got.transform.parent;
+            var firstCorner = movementAreaCorners[0];
+            var firstX = parent != null ? parent.InverseTransformPoint(firstCorner).x : firstCorner.x;
+            minX = firstX;
+            maxX = firstX;
+
+            for (int i = 1; i < movementAreaCorners.Length; i++)
+            {
+                var corner = movementAreaCorners[i];
+                var x = parent != null ? parent.InverseTransformPoint(corner).x : corner.x;
+                if (x < minX)
+                {
+                    minX = x;
+                }
+
+                if (x > maxX)
+                {
+                    maxX = x;
+                }
+            }
+
+            width = Mathf.Max(0f, maxX - minX);
+            return width > 0.0001f;
         }
 
         public void PlayMissAnimation()
         {
             RequestMovement(DogMovementType.Miss);
+        }
+
+        public void PlayEndRoundLmaoMovement()
+        {
+            RequestMovement(DogMovementType.EndRound);
         }
 
         public void ResetToIdle()
@@ -251,8 +438,9 @@ namespace PigeonHunt
             movementRequestTimer = 0f;
 
             var targetState = type == DogMovementType.Hit ? hitState :
-                              type == DogMovementType.Miss ? missState : idleState;
+                              type == DogMovementType.Miss || type == DogMovementType.EndRound ? missState : idleState;
             ApplyState(targetState);
+            PlayMovementSound(type);
             StartMovementSequence(type);
             ScheduleStateReset(type, targetState);
         }
@@ -264,6 +452,11 @@ namespace PigeonHunt
             stateResetSourceState = int.MinValue;
 
             if (type == DogMovementType.None)
+            {
+                return;
+            }
+
+            if (type == DogMovementType.EndRound)
             {
                 return;
             }
@@ -291,17 +484,6 @@ namespace PigeonHunt
                 return;
             }
 
-            if (!roundStartBaseCached)
-            {
-                CacheRoundStartPose();
-            }
-
-            if (roundStartBaseCached)
-            {
-                roundStart.transform.position = roundStartBasePosition;
-                roundStart.transform.rotation = roundStartBaseRotation;
-            }
-
             roundStartMovementTarget = roundStart.transform;
             if (roundStartMovementTarget == null)
             {
@@ -318,6 +500,45 @@ namespace PigeonHunt
             {
                 AdvanceRoundStartMovementPhase();
             }
+        }
+
+        public void PlayRoundNextMovementSequence()
+        {
+            if (roundNextMovementActive)
+            {
+                return;
+            }
+
+            if (roundNext == null)
+            {
+                return;
+            }
+
+            ApplyState(roundNextState);
+
+            roundNextMovementTarget = roundNext.transform;
+            if (roundNextMovementTarget == null)
+            {
+                roundNextMovementActive = false;
+                roundNextMovementPhase = RoundNextPhaseComplete;
+                return;
+            }
+
+            roundNextMovementTarget.localPosition = Vector3.zero;
+
+            roundNextMovementActive = true;
+            roundNextMovementPhase = RoundNextPhaseMove;
+            roundNextMovementPhaseTimer = Mathf.Max(0f, roundNextMoveDuration);
+
+            if (roundNextMovementPhaseTimer <= 0f)
+            {
+                AdvanceRoundNextMovementPhase();
+            }
+        }
+
+        public void DebugPlayRoundNextAnimation()
+        {
+            PlayRoundNextMovementSequence();
         }
 
         private void StartMovementSequence(DogMovementType type)
@@ -341,6 +562,8 @@ namespace PigeonHunt
             movementTarget = target;
             movementBasePosition = target.position;
             movementVerticalOffset = 0f;
+            movementResetOnComplete = type == DogMovementType.EndRound;
+            lmaoResetPausePending = type == DogMovementType.EndRound;
 
             var referenceHeight = Mathf.Max(0.0001f, GetMovementReferenceHeight(type));
             movementMoveUpSpeedWorld = Mathf.Max(0f, GetMoveUpSpeed(type)) * referenceHeight;
@@ -595,9 +818,29 @@ namespace PigeonHunt
                 }
                 else if (movementPhase == MovementPhasePause)
                 {
-                    movementPhase = MovementPhaseAccelerateDown;
-                    movementPhaseTimer = Mathf.Max(0f, GetDownAccelerationDuration(activeMovementType));
-                    movementCurrentVerticalSpeed = 0f;
+                    if (activeMovementType == DogMovementType.EndRound)
+                    {
+                        if (lmaoResetPausePending)
+                        {
+                            lmaoResetPausePending = false;
+                            movementPhaseTimer = Mathf.Max(0f, lmaoResetDelay);
+                            movementCurrentVerticalSpeed = 0f;
+                            if (movementPhaseTimer <= 0f)
+                            {
+                                CompleteMovement();
+                            }
+                        }
+                        else
+                        {
+                            CompleteMovement();
+                        }
+                    }
+                    else
+                    {
+                        movementPhase = MovementPhaseAccelerateDown;
+                        movementPhaseTimer = Mathf.Max(0f, GetDownAccelerationDuration(activeMovementType));
+                        movementCurrentVerticalSpeed = 0f;
+                    }
                 }
                 else if (movementPhase == MovementPhaseAccelerateDown)
                 {
@@ -637,7 +880,12 @@ namespace PigeonHunt
 
         private void CompleteMovement()
         {
+            var shouldResetState = movementResetOnComplete;
             StopMovement(true);
+            if (shouldResetState)
+            {
+                ApplyState(idleState);
+            }
         }
 
         private void StopMovement(bool resetPositionToBase)
@@ -654,6 +902,8 @@ namespace PigeonHunt
             movementTarget = null;
             movementVerticalOffset = 0f;
             movementCurrentVerticalSpeed = 0f;
+            movementResetOnComplete = false;
+            lmaoResetPausePending = false;
         }
 
 
@@ -708,6 +958,7 @@ namespace PigeonHunt
                 }
                 else
                 {
+                    ResetRoundStartTarget();
                     roundStartMovementActive = false;
                     roundStartMovementPhase = RoundStartPhaseComplete;
                     roundStartMovementTarget = null;
@@ -761,42 +1012,19 @@ namespace PigeonHunt
 
         private void MoveRoundStartArc(float deltaTime)
         {
-            if (roundStartMovementTarget == null)
-            {
-                return;
-            }
-
-            var arcDuration = Mathf.Max(0.0001f, roundStartArcDuration);
-            var arcSpeed = Mathf.Max(0f, roundStartArcMoveSpeed);
-            if (arcSpeed <= 0f)
-            {
-                return;
-            }
-
             var referenceWidth = GetRoundStartMovementReferenceWidth();
-            var horizontalDistance = Mathf.Max(0f, roundStartArcHorizontalDistance) * referenceWidth;
-            var verticalDistance = Mathf.Max(0f, roundStartArcVerticalDistance) * referenceWidth;
-            var extraDropDistance = Mathf.Max(0f, roundStartArcExtraDropDistance) * referenceWidth;
-
-            roundStartArcElapsed += deltaTime * arcSpeed;
-            var normalizedTime = Mathf.Clamp01(roundStartArcElapsed / arcDuration);
-
-            var offset = Vector3.right * (horizontalDistance * normalizedTime);
-            var arcHeight = Mathf.Sin(normalizedTime * Mathf.PI) * verticalDistance;
-            if (extraDropDistance > 0f && normalizedTime >= 0.5f)
-            {
-                float dropT = (normalizedTime - 0.5f) / 0.5f; // 0→1 over second half
-                arcHeight -= extraDropDistance * Mathf.Clamp01(dropT);
-            }
-
-            offset += Vector3.up * arcHeight;
-            roundStartMovementTarget.position = roundStartArcBasePosition + offset;
-
-            if (!roundStartArcPeakTriggered && normalizedTime >= 0.5f)
-            {
-                roundStartArcPeakTriggered = true;
-                OnArcPeak();
-            }
+            ApplyArcMovement(
+                roundStartMovementTarget,
+                deltaTime,
+                ref roundStartArcElapsed,
+                ref roundStartArcLayerChanged,
+                roundStartArcDuration,
+                roundStartArcMoveSpeed,
+                roundStartArcHorizontalDistance,
+                roundStartArcVerticalDistance,
+                roundStartArcExtraDropDistance,
+                referenceWidth,
+                ref roundStartArcBasePosition);
         }
 
         private void BeginRoundStartArcPhase()
@@ -804,7 +1032,7 @@ namespace PigeonHunt
             roundStartMovementPhase = RoundStartPhaseArcMove;
             roundStartMovementPhaseTimer = Mathf.Max(0f, roundStartArcDuration);
             roundStartArcElapsed = 0f;
-            roundStartArcPeakTriggered = false;
+            roundStartArcLayerChanged = false;
 
             if (roundStartMovementTarget != null)
             {
@@ -838,6 +1066,233 @@ namespace PigeonHunt
             }
 
             return 1f;
+        }
+
+        private void UpdateRoundNextMovement()
+        {
+            if (roundNextMovementTarget == null)
+            {
+                roundNextMovementActive = false;
+                roundNextMovementPhase = RoundNextPhaseComplete;
+                return;
+            }
+
+            var deltaTime = Time.deltaTime;
+            if (roundNextMovementPhase == RoundNextPhaseMove)
+            {
+                MoveRoundNextTarget(deltaTime);
+            }
+            else if (roundNextMovementPhase == RoundNextPhaseArcMove)
+            {
+                MoveRoundNextArc(deltaTime);
+            }
+
+            roundNextMovementPhaseTimer -= deltaTime;
+            if (roundNextMovementPhaseTimer <= 0f)
+            {
+                AdvanceRoundNextMovementPhase();
+            }
+        }
+
+        private void AdvanceRoundNextMovementPhase()
+        {
+            while (true)
+            {
+                if (roundNextMovementPhase == RoundNextPhaseMove)
+                {
+                    roundNextMovementPhase = RoundNextPhasePause;
+                    roundNextMovementPhaseTimer = Mathf.Max(0f, roundNextPauseDuration);
+                }
+                else if (roundNextMovementPhase == RoundNextPhasePause)
+                {
+                    BeginRoundNextArcPhase();
+                }
+                else
+                {
+                    ResetRoundNextTarget();
+                    roundNextMovementActive = false;
+                    roundNextMovementPhase = RoundNextPhaseComplete;
+                    roundNextMovementTarget = null;
+                    break;
+                }
+
+                if (roundNextMovementPhase == RoundNextPhaseArcMove)
+                {
+                    if (roundNextMovementPhaseTimer > 0f)
+                    {
+                        break;
+                    }
+
+                    continue;
+                }
+
+                if (roundNextMovementPhaseTimer > 0f)
+                {
+                    break;
+                }
+            }
+        }
+
+        private void MoveRoundNextTarget(float deltaTime)
+        {
+            if (roundNextMovementTarget == null)
+            {
+                return;
+            }
+
+            var normalizedSpeed = Mathf.Max(0f, roundNextMoveSpeed);
+            if (normalizedSpeed <= 0f)
+            {
+                return;
+            }
+
+            var referenceWidth = GetRoundNextMovementReferenceWidth();
+            if (referenceWidth <= 0f)
+            {
+                return;
+            }
+
+            var distance = normalizedSpeed * referenceWidth * deltaTime;
+            if (distance <= 0f)
+            {
+                return;
+            }
+
+            roundNextMovementTarget.Translate(Vector3.right * distance, Space.World);
+        }
+
+        private void MoveRoundNextArc(float deltaTime)
+        {
+            var referenceWidth = GetRoundNextMovementReferenceWidth();
+            ApplyArcMovement(
+                roundNextMovementTarget,
+                deltaTime,
+                ref roundNextArcElapsed,
+                ref roundNextArcLayerChanged,
+                roundStartArcDuration,
+                roundStartArcMoveSpeed,
+                roundStartArcHorizontalDistance,
+                roundStartArcVerticalDistance,
+                roundStartArcExtraDropDistance,
+                referenceWidth,
+                ref roundNextArcBasePosition);
+        }
+
+        private void BeginRoundNextArcPhase()
+        {
+            roundNextMovementPhase = RoundNextPhaseArcMove;
+            roundNextMovementPhaseTimer = Mathf.Max(0f, roundStartArcDuration);
+            roundNextArcElapsed = 0f;
+            roundNextArcLayerChanged = false;
+
+            if (roundNextMovementTarget != null)
+            {
+                roundNextArcBasePosition = roundNextMovementTarget.position;
+            }
+        }
+
+        private void ApplyArcMovement(
+            Transform target,
+            float deltaTime,
+            ref float elapsed,
+            ref bool layerChanged,
+            float duration,
+            float arcSpeed,
+            float horizontalDistanceNormalized,
+            float verticalDistanceNormalized,
+            float extraDropDistanceNormalized,
+            float referenceWidth,
+            ref Vector3 basePosition)
+        {
+            if (target == null)
+            {
+                return;
+            }
+
+            var safeDuration = Mathf.Max(0.0001f, duration);
+            var safeSpeed = Mathf.Max(0f, arcSpeed);
+            if (safeSpeed <= 0f)
+            {
+                return;
+            }
+
+            if (referenceWidth <= 0f)
+            {
+                return;
+            }
+
+            var horizontalDistance = Mathf.Max(0f, horizontalDistanceNormalized) * referenceWidth;
+            var verticalDistance = Mathf.Max(0f, verticalDistanceNormalized) * referenceWidth;
+            var extraDropDistance = Mathf.Max(0f, extraDropDistanceNormalized) * referenceWidth;
+
+            elapsed += deltaTime;
+            var layerChangedTime = Mathf.Max(0f, ArcLayerChangedTime);
+            if (!layerChanged && elapsed >= layerChangedTime)
+            {
+                layerChanged = true;
+                SetDogSortingOrder(2);
+            }
+
+            var normalizedTime = Mathf.Clamp01((elapsed * safeSpeed) / safeDuration);
+
+            var offset = Vector3.right * (horizontalDistance * normalizedTime);
+            var arcHeight = Mathf.Sin(normalizedTime * Mathf.PI) * verticalDistance;
+            if (extraDropDistance > 0f && normalizedTime >= 0.5f)
+            {
+                float dropT = (normalizedTime - 0.5f) / 0.5f;
+                arcHeight -= extraDropDistance * Mathf.Clamp01(dropT);
+            }
+
+            offset += Vector3.up * arcHeight;
+            target.position = basePosition + offset;
+        }
+
+        private void ResetRoundNextTarget()
+        {
+            if (roundNextMovementTarget == null)
+            {
+                return;
+            }
+
+            roundNextMovementTarget.localPosition = Vector3.zero;
+        }
+
+        private float GetRoundNextMovementReferenceWidth()
+        {
+            var area = movementArea;
+            if (area == null && roundNext != null)
+            {
+                area = roundNext.GetComponent<RectTransform>();
+            }
+
+            if (area != null)
+            {
+                area.GetWorldCorners(roundNextMovementAreaCorners);
+                var widthVector = roundNextMovementAreaCorners[3] - roundNextMovementAreaCorners[0];
+                var width = widthVector.magnitude;
+                if (width > 0.0001f)
+                {
+                    return width;
+                }
+            }
+
+            return 1f;
+        }
+
+        private float GetRoundStartMovementSequenceDuration()
+        {
+            return Mathf.Max(0f, roundStartMoveDuration)
+                 + Mathf.Max(0f, roundStartPauseDuration)
+                 + Mathf.Max(0f, roundStartSecondMoveDuration)
+                 + Mathf.Max(0f, roundStartSecondPauseDuration)
+                 + Mathf.Max(0f, roundStartArcDuration);
+        }
+
+        private float GetRoundNextMovementSequenceDuration()
+        {
+            return Mathf.Max(0f, roundNextMoveDuration)
+                 + Mathf.Max(0f, roundNextPauseDuration)
+                 + Mathf.Max(0f, roundStartArcDuration);
         }
 
         private float GetMovementReferenceHeight(DogMovementType type)
@@ -880,7 +1335,7 @@ namespace PigeonHunt
                 return got != null ? got.transform : GetTransformForState(hitState);
             }
 
-            if (type == DogMovementType.Miss)
+            if (type == DogMovementType.Miss || type == DogMovementType.EndRound)
             {
                 return lmfao != null ? lmfao.transform : GetTransformForState(missState);
             }
@@ -890,41 +1345,81 @@ namespace PigeonHunt
 
         private float GetMoveUpDelay(DogMovementType type)
         {
+            if (type == DogMovementType.EndRound)
+            {
+                return Mathf.Max(0f, lmaoMoveUpDelay);
+            }
+
             return type == DogMovementType.Miss ? Mathf.Max(0f, missMoveUpDelay) : Mathf.Max(0f, hitMoveUpDelay);
         }
 
         private float GetMoveUpSpeed(DogMovementType type)
         {
+            if (type == DogMovementType.EndRound)
+            {
+                return Mathf.Max(0f, lmaoMoveUpSpeed);
+            }
+
             return type == DogMovementType.Miss ? Mathf.Max(0f, missMoveUpSpeed) : Mathf.Max(0f, hitMoveUpSpeed);
         }
 
         private float GetMoveUpDuration(DogMovementType type)
         {
+            if (type == DogMovementType.EndRound)
+            {
+                return Mathf.Max(0f, lmaoMoveUpDuration);
+            }
+
             return type == DogMovementType.Miss ? Mathf.Max(0f, missMoveUpDuration) : Mathf.Max(0f, hitMoveUpDuration);
         }
 
         private float GetSlowdownDuration(DogMovementType type)
         {
+            if (type == DogMovementType.EndRound)
+            {
+                return Mathf.Max(0f, lmaoSlowdownDuration);
+            }
+
             return type == DogMovementType.Miss ? Mathf.Max(0f, missSlowdownDuration) : Mathf.Max(0f, hitSlowdownDuration);
         }
 
         private float GetPauseDuration(DogMovementType type)
         {
+            if (type == DogMovementType.EndRound)
+            {
+                return Mathf.Max(0f, lmaoPauseDuration);
+            }
+
             return type == DogMovementType.Miss ? Mathf.Max(0f, missPauseDuration) : Mathf.Max(0f, hitPauseDuration);
         }
 
         private float GetDownAccelerationDuration(DogMovementType type)
         {
+            if (type == DogMovementType.EndRound)
+            {
+                return 0f;
+            }
+
             return type == DogMovementType.Miss ? Mathf.Max(0f, missDownAccelerationDuration) : Mathf.Max(0f, hitDownAccelerationDuration);
         }
 
         private float GetMoveDownSpeed(DogMovementType type)
         {
+            if (type == DogMovementType.EndRound)
+            {
+                return 0f;
+            }
+
             return type == DogMovementType.Miss ? Mathf.Max(0f, missMoveDownSpeed) : Mathf.Max(0f, hitMoveDownSpeed);
         }
 
         private float GetMoveDownDuration(DogMovementType type)
         {
+            if (type == DogMovementType.EndRound)
+            {
+                return 0f;
+            }
+
             return type == DogMovementType.Miss ? Mathf.Max(0f, missMoveDownDuration) : Mathf.Max(0f, hitMoveDownDuration);
         }
 
@@ -933,44 +1428,121 @@ namespace PigeonHunt
             return type == DogMovementType.Miss ? Mathf.Max(0f, missResetDelay) : Mathf.Max(0f, hitResetDelay);
         }
 
-        private void OnArcPeak()
+        private void PlayMovementSound(DogMovementType type)
         {
-            if (dogMainObject != null)
+            if (soundManager == null)
             {
-                var canvas = dogMainObject.GetComponent<Canvas>();
+                return;
+            }
 
-                canvas.sortingOrder = 2;
-            }  
+            if (type == DogMovementType.Hit)
+            {
+                if (soundManager.getAudio != null)
+                {
+                    soundManager.getAudio.Play();
+                }
+
+                return;
+            }
+
+            if (type == DogMovementType.Miss)
+            {
+                if (soundManager.missAudio != null)
+                {
+                    soundManager.missAudio.Play();
+                }
+            }
         }
 
-        private void CacheRoundStartPose()
+        private void PlayRoundStartSound()
         {
-            if (roundStart == null)
+            if (soundManager == null)
             {
-                roundStartBaseCached = false;
                 return;
             }
 
-            var transformRef = roundStart.transform;
-            if (transformRef == null)
+            if (soundManager.roundStartAudio != null)
             {
-                roundStartBaseCached = false;
+                soundManager.roundStartAudio.Play();
+            }
+        }
+
+        private void PlayRoundNextSound()
+        {
+            if (soundManager == null)
+            {
                 return;
             }
 
-            roundStartBasePosition = transformRef.position;
-            roundStartBaseRotation = transformRef.rotation;
-            roundStartBaseCached = true;
+            var delay = Mathf.Max(0f, playRoundNextAudioDelay);
+            if (delay > 0f)
+            {
+                SendCustomEventDelayedSeconds(nameof(PlayRoundNextSoundImmediate), delay);
+                return;
+            }
+
+            PlayRoundNextSoundImmediate();
+        }
+
+        private void PlayRoundNextSoundImmediate()
+        {
+            if (soundManager == null)
+            {
+                return;
+            }
+
+            if (soundManager.roundNextAudio != null)
+            {
+                soundManager.roundNextAudio.Play();
+            }
+        }
+
+        private void ResetRoundStartTarget()
+        {
+            if (roundStartMovementTarget == null)
+            {
+                return;
+            }
+
+            roundStartMovementTarget.localPosition = Vector3.zero;
         }
 
         public void RestLayerOrder()
         {
-            if (dogMainObject != null)
-            {
-                var canvas = dogMainObject.GetComponent<Canvas>();
+            SetDogSortingOrder(3);
+        }
 
-                canvas.sortingOrder = 3;
+        private void SetDogSortingOrder(int sortingOrder)
+        {
+            var canvas = GetDogMainCanvas();
+            if (canvas == null)
+            {
+                return;
             }
+
+            canvas.sortingOrder = sortingOrder;
+        }
+
+        private Canvas GetDogMainCanvas()
+        {
+            if (dogMainCanvas != null)
+            {
+                return dogMainCanvas;
+            }
+
+            if (dogMainObject == null)
+            {
+                return null;
+            }
+
+            dogMainCanvas = dogMainObject.GetComponent<Canvas>();
+            if (dogMainCanvas == null)
+            {
+                dogMainCanvas = dogMainObject.GetComponentInChildren<Canvas>(true);
+            }
+
+            return dogMainCanvas;
         }
     }
 }
+

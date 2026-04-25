@@ -9,21 +9,29 @@ using UnityEngine.Serialization;
 [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
 public class SoundManager : UdonSharpBehaviour
 {
+    [Header("Dog Audio")]
+    public AudioSource missAudio;
+    public AudioSource getAudio;
+
     [Header("Round Audio")]
+    public AudioSource roundStartAudio;
+    public AudioSource roundNextAudio;
     public AudioSource endAudio;
-    public AudioSource endLamoAudio;
+    public AudioSource endLmaoAudio;
     public AudioSource scoreCountAudio;
     [FormerlySerializedAs("nextAudio")]
     public AudioSource fullHitAudio;
     [Min(0f)]
     public float endAudioDuration = 0f;
     [Min(0f)]
-    public float endLamoAudioDuration = 0f;
+    public float endLmaoAudioDuration = 0f;
     [Min(0f)]
     public float scoreCountAudioDuration = 0f;
     [FormerlySerializedAs("nextAudioDuration")]
     [Min(0f)]
     public float fullHitAudioDuration = 0f;
+    [Min(0f)]
+    public float playRoundNextAudioDelay = 1f;
 
     private const int SequenceNone = 0;
     private const int SequenceRoundClear = 1;
@@ -78,9 +86,9 @@ public class SoundManager : UdonSharpBehaviour
         PlayOneShot(endAudio);
     }
 
-    public void PlayRoundEndLamo()
+    public void PlayRoundEndLmao()
     {
-        PlayOneShot(endLamoAudio);
+        PlayOneShot(endLmaoAudio);
     }
 
     public void PlayScoreCount()
@@ -112,7 +120,7 @@ public class SoundManager : UdonSharpBehaviour
     {
         StopSequence();
         PigeonHunt.QychuiUtilities.SafeStop(endAudio);
-        PigeonHunt.QychuiUtilities.SafeStop(endLamoAudio);
+        PigeonHunt.QychuiUtilities.SafeStop(endLmaoAudio);
         PigeonHunt.QychuiUtilities.SafeStop(scoreCountAudio);
         PigeonHunt.QychuiUtilities.SafeStop(fullHitAudio);
     }
@@ -131,6 +139,7 @@ public class SoundManager : UdonSharpBehaviour
     {
         PigeonHunt.QychuiUtilities.SafePlay(source);
     }
+
 
     private void StartSequence(int sequence, bool fullHit)
     {
@@ -219,7 +228,7 @@ public class SoundManager : UdonSharpBehaviour
 
         if (sequence == SequenceRoundFail)
         {
-            return step == 0 ? endAudio : endLamoAudio;
+            return step == 0 ? endAudio : endLmaoAudio;
         }
 
         return null;
@@ -234,7 +243,7 @@ public class SoundManager : UdonSharpBehaviour
 
         if (sequence == SequenceRoundFail)
         {
-            return Mathf.Max(0f, step == 0 ? endAudioDuration : endLamoAudioDuration);
+            return Mathf.Max(0f, step == 0 ? endAudioDuration : endLmaoAudioDuration);
         }
 
         return 0f;

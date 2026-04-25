@@ -4,7 +4,6 @@ using UnityEngine;
 namespace PigeonHunt
 {
     [AddComponentMenu("PigeonHunt/Gun Controller")]
-    [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class GunController : UdonSharpBehaviour
     {
         public Transform fireOrigin;
@@ -32,18 +31,18 @@ namespace PigeonHunt
             TryFire();
         }
 
-        private void TryFire()
+        private bool TryFire()
         {
             var currentTime = Time.time;
 
             if (currentTime < lastFireTime + fireCooldown)
             {
-                return;
+                return false;
             }
 
             if (gameManager != null && !gameManager.TryRegisterShot())
             {
-                return;
+                return false;
             }
 
             if (!QychuiUtilities.TryGetOriginAndDirection(fireOrigin, transform, out Vector3 origin, out Vector3 direction))
@@ -53,7 +52,7 @@ namespace PigeonHunt
                     gameManager.NotifyShotOutcome(false);
                 }
 
-                return;
+                return false;
             }
 
             lastFireTime = currentTime;
@@ -111,6 +110,8 @@ namespace PigeonHunt
             {
                 gameManager.NotifyShotOutcome(hitPigeon);
             }
+
+            return true;
         }
     }
 }

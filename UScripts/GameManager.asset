@@ -1037,13 +1037,13 @@ MonoBehaviour:
       Data: 
     - Name: $k
       Entry: 1
-      Data: PigeonPool
+      Data: pigeonPool
     - Name: $v
       Entry: 7
       Data: 57|UdonSharp.Compiler.FieldDefinition, UdonSharp.Editor
     - Name: <Name>k__BackingField
       Entry: 1
-      Data: PigeonPool
+      Data: pigeonPool
     - Name: <UserType>k__BackingField
       Entry: 7
       Data: 58|System.RuntimeType, mscorlib

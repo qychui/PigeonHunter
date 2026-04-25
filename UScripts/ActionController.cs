@@ -1,5 +1,6 @@
 using UdonSharp;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 namespace PigeonHunt
 {
@@ -16,7 +17,6 @@ namespace PigeonHunt
         private int pigeonsResolvedThisRound;
         private int pigeonsHitThisRound;
         private float spawnTimer;
-        private int streak;
         private float roundDifficultyBonus;
         private float hitDifficultyBonus;
         private bool waitingForStartAnimation;
@@ -39,6 +39,8 @@ namespace PigeonHunt
         [SerializeField] private float roundEndAudioDelay = 0.5f;
         private float roundEndAudioDelayTimer;
         private bool roundEndAudioDelayStarted;
+        private bool roundEndLmaoAnimPending;
+        private float roundEndLmaoAnimTimer;
         private bool lastResolutionHadAnimation;
         private bool lastResolutionWasHit;
         private int currentDifficultyLevel;
@@ -64,9 +66,6 @@ namespace PigeonHunt
         private const int GameModeSingle = 1;
         private const int GameModePair = 2;
 
-        private const string StatusWaiting = "Press trigger to start";
-        private const string StatusPlaying = "";
-        private const string StatusFinished = "Round complete";
         private const int WeaponZeroClipSize = 3;
         private const int MaxDifficultyLevel = 4;
         public bool RoundActive
@@ -82,6 +81,23 @@ namespace PigeonHunt
         public bool IsGameOver
         {
             get { return gameLocked; }
+        }
+
+        public Vector3 GetRoundEndPigeonPosition()
+        {
+            if (manager == null || manager.pigeonPool == null)
+            {
+                return Vector3.zero;
+            }
+            
+            var pigeon = manager.pigeonPool[0];
+
+            if (pigeon != null)
+            {
+                return pigeon.transform.position;
+            }
+
+            return Vector3.zero;
         }
 
         public float DifficultyMultiplier
@@ -213,10 +229,36 @@ namespace PigeonHunt
                         if (roundEndPassed)
                         {
                             manager.soundManager.PlayRoundClearSequence(isPerfectHit);
+                            roundEndLmaoAnimPending = false;
+                            roundEndLmaoAnimTimer = 0f;
                         }
                         else
                         {
                             manager.soundManager.PlayRoundFailSequence();
+                            roundEndLmaoAnimPending = manager.animationController != null;
+                            roundEndLmaoAnimTimer = Mathf.Max(0f, manager.soundManager.endAudioDuration);
+                        }
+                    }
+                    else
+                    {
+                        roundEndLmaoAnimPending = false;
+                        roundEndLmaoAnimTimer = 0f;
+                    }
+                }
+
+                if (roundEndLmaoAnimPending)
+                {
+                    if (roundEndLmaoAnimTimer > 0f)
+                    {
+                        roundEndLmaoAnimTimer -= Time.deltaTime;
+                    }
+
+                    if (roundEndLmaoAnimTimer <= 0f)
+                    {
+                        roundEndLmaoAnimPending = false;
+                        if (manager.animationController != null)
+                        {
+                            manager.animationController.PlayEndRoundLmaoMovement();
                         }
                     }
                 }
@@ -249,7 +291,14 @@ namespace PigeonHunt
                     startAnimationTimer -= Time.deltaTime;
                 }
 
-                manager.animationController.PlayRoundStartMovementSequence();
+                if (currentRoundIndex > 1)
+                {
+                    manager.animationController.PlayRoundNextMovementSequence();
+                }
+                else
+                {
+                    manager.animationController.PlayRoundStartMovementSequence();
+                }
 
                 if (startAnimationTimer > 0f)
                 {
@@ -320,7 +369,7 @@ namespace PigeonHunt
                 return;
             }
 
-            if (manager.PigeonPool == null || manager.PigeonPool.Length == 0)
+            if (manager.pigeonPool == null || manager.pigeonPool.Length == 0)
             {
                 return;
             }
@@ -369,6 +418,8 @@ namespace PigeonHunt
             roundEndAudioDelayStarted = false;
             roundEndAudioDelayTimer = 0f;
             roundEndAnimationTimer = 0f;
+            roundEndLmaoAnimPending = false;
+            roundEndLmaoAnimTimer = 0f;
             roundActive = false;
             roundEndPassed = DetermineRoundPass();
 
@@ -396,6 +447,8 @@ namespace PigeonHunt
             roundEndAudioDelayStarted = false;
             roundEndAudioDelayTimer = 0f;
             roundEndPassed = false;
+            roundEndLmaoAnimPending = false;
+            roundEndLmaoAnimTimer = 0f;
             waitingForStartAnimation = false;
             startAnimationTimer = 0f;
             spawnTimer = 0f;
@@ -446,7 +499,6 @@ namespace PigeonHunt
                 var scoreAmount = pigeon != null ? pigeon.GetScoreForCurrentRound() : manager.uiController.scorePerHit;
                 manager.uiController.AddScore(scoreAmount);
             }
-            streak++;
             pigeonsHitThisRound++;
             ApplyHitDifficultyBonus();
             UpdateHitDisplay();
@@ -501,7 +553,7 @@ namespace PigeonHunt
 
         private void TryTriggerShotDirectionChange()
         {
-            if (manager == null || manager.PigeonPool == null || manager.PigeonPool.Length == 0)
+            if (manager == null || manager.pigeonPool == null || manager.pigeonPool.Length == 0)
             {
                 return;
             }
@@ -512,9 +564,9 @@ namespace PigeonHunt
                 return;
             }
 
-            for (int i = 0; i < manager.PigeonPool.Length; i++)
+            for (int i = 0; i < manager.pigeonPool.Length; i++)
             {
-                var pigeon = manager.PigeonPool[i];
+                var pigeon = manager.pigeonPool[i];
                 if (pigeon == null)
                 {
                     continue;
@@ -578,7 +630,6 @@ namespace PigeonHunt
 
         private void RegisterPigeonMiss()
         {
-            streak = 0;
             ReduceHitDifficultyBonus();
         }
 
@@ -681,7 +732,9 @@ namespace PigeonHunt
             lastResolutionHadAnimation = true;
             if (wasHit)
             {
-                manager.animationController.PlayHitAnimation();
+                var pos = GetRoundEndPigeonPosition();
+
+                manager.animationController.PlayHitAnimation(pos.x);
             }
             else
             {
@@ -753,7 +806,7 @@ namespace PigeonHunt
         {
             spawnIndex = -1;
 
-            if (manager.PigeonPool == null || manager.PigeonPool.Length == 0)
+            if (manager.pigeonPool == null || manager.pigeonPool.Length == 0)
             {
                 return false;
             }
@@ -1034,14 +1087,14 @@ namespace PigeonHunt
 
         private PigeonTarget GetAvailablePigeon()
         {
-            if (manager.PigeonPool == null)
+            if (manager.pigeonPool == null)
             {
                 return null;
             }
 
-            for (int i = 0; i < manager.PigeonPool.Length; i++)
+            for (int i = 0; i < manager.pigeonPool.Length; i++)
             {
-                var candidate = manager.PigeonPool[i];
+                var candidate = manager.pigeonPool[i];
                 if (candidate != null && candidate.IsAvailable)
                 {
                     return candidate;
@@ -1053,15 +1106,15 @@ namespace PigeonHunt
 
         private int CountActivePigeons()
         {
-            if (manager.PigeonPool == null)
+            if (manager.pigeonPool == null)
             {
                 return 0;
             }
 
             var count = 0;
-            for (int i = 0; i < manager.PigeonPool.Length; i++)
+            for (int i = 0; i < manager.pigeonPool.Length; i++)
             {
-                var pigeon = manager.PigeonPool[i];
+                var pigeon = manager.pigeonPool[i];
                 if (pigeon != null && pigeon.OccupiesSlot)
                 {
                     count++;
@@ -1073,14 +1126,14 @@ namespace PigeonHunt
 
         private void InitializePool()
         {
-            if (manager.PigeonPool == null)
+            if (manager.pigeonPool == null)
             {
                 return;
             }
 
-            for (int i = 0; i < manager.PigeonPool.Length; i++)
+            for (int i = 0; i < manager.pigeonPool.Length; i++)
             {
-                var pigeon = manager.PigeonPool[i];
+                var pigeon = manager.pigeonPool[i];
                 if (pigeon == null)
                 {
                     continue;
@@ -1112,6 +1165,8 @@ namespace PigeonHunt
             roundEndAudioDelayTimer = 0f;
             roundEndPassed = false;
             roundEndAnimationTimer = 0f;
+            roundEndLmaoAnimPending = false;
+            roundEndLmaoAnimTimer = 0f;
             lastResolutionHadAnimation = false;
             lastResolutionWasHit = false;
             ResetRoundRuntimeState();
@@ -1127,7 +1182,6 @@ namespace PigeonHunt
             pigeonsResolvedThisRound = 0;
             pigeonsHitThisRound = 0;
             spawnTimer = 0f;
-            streak = 0;
             pairWaveActive = false;
             pairWavePendingResolutions = 0;
             pairWaveHadHit = false;
@@ -1139,6 +1193,8 @@ namespace PigeonHunt
             roundEndAudioDelayTimer = 0f;
             roundEndPassed = false;
             roundEndAnimationTimer = 0f;
+            roundEndLmaoAnimPending = false;
+            roundEndLmaoAnimTimer = 0f;
             lastResolutionHadAnimation = false;
             lastResolutionWasHit = false;
             ResetWaveTracking();
@@ -1146,14 +1202,14 @@ namespace PigeonHunt
 
         private void DespawnAllPigeons()
         {
-            if (manager.PigeonPool == null)
+            if (manager.pigeonPool == null)
             {
                 return;
             }
 
-            for (int i = 0; i < manager.PigeonPool.Length; i++)
+            for (int i = 0; i < manager.pigeonPool.Length; i++)
             {
-                var pigeon = manager.PigeonPool[i];
+                var pigeon = manager.pigeonPool[i];
                 if (pigeon != null)
                 {
                     pigeon.DespawnImmediate();
@@ -1277,17 +1333,18 @@ namespace PigeonHunt
                 return;
             }
 
-            var startDelay = manager.animationController.GameStartDuration;
+            var useNextTiming = currentRoundIndex > 1;
+            var startDelay = useNextTiming ? manager.animationController.GameNextDuration : manager.animationController.GameStartDuration;
             startAnimationTimer = Mathf.Max(0f, startDelay);
 
-            startDelayTime = manager.animationController.GameStartDelay;
+            startDelayTime = useNextTiming ? manager.animationController.GameNextDelay : manager.animationController.GameStartDelay;
             if (startDelayTime > 0f)
             {
                 manager.animationController.RestLayerOrder();
             }
 
             waitingForStartAnimation = startAnimationTimer > 0f;
-            manager.animationController.PlayGameStartAnimation();
+            manager.animationController.PlayGameStartAnimationWithAudio(useNextTiming);
         }
     }
 }

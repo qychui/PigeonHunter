@@ -48,7 +48,7 @@ namespace PigeonHunt
         public float bottomEdgeSpawnSegment = 0.25f;
 
         [Header("References")]
-        public PigeonTarget[] PigeonPool;
+        public PigeonTarget[] pigeonPool;
         public UIController uiController;
 
         [Header("Animation")]
@@ -149,7 +149,6 @@ namespace PigeonHunt
             }
         }
 
-        // Comment out the call in Interact() if you want to disable restart-on-gameover.
         private bool TryRestartOnGameOver()
         {
             if (actionController == null || !actionController.IsGameOver)
@@ -187,15 +186,15 @@ namespace PigeonHunt
             exitAnimationActive = false;
             exitAnimationPending = 0;
 
-            if (PigeonPool == null || PigeonPool.Length == 0)
+            if (pigeonPool == null || pigeonPool.Length == 0)
             {
                 SetFlyAwayUiActive(false);
                 return;
             }
 
-            for (int i = 0; i < PigeonPool.Length; i++)
+            for (int i = 0; i < pigeonPool.Length; i++)
             {
-                var target = PigeonPool[i];
+                var target = pigeonPool[i];
                 if (target == null)
                 {
                     continue;

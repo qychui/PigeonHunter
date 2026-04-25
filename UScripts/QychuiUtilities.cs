@@ -151,6 +151,22 @@ namespace PigeonHunt
         }
 
         /// <summary>
+        /// Converts a percent value (0-100) to a ratio (0-1).
+        /// </summary>
+        public static float PercentToRatio(float percent)
+        {
+            return Mathf.Clamp01(percent * 0.01f);
+        }
+
+        /// <summary>
+        /// Returns the percent portion of a base value.
+        /// </summary>
+        public static float GetPercentValue(float baseValue, float percent)
+        {
+            return Mathf.Max(0f, baseValue) * PercentToRatio(percent);
+        }
+
+        /// <summary>
         /// Ensures a BoxCollider reference is assigned by searching the owner hierarchy when needed.
         /// </summary>
         public static BoxCollider EnsureBoxCollider(Component owner, BoxCollider collider)
