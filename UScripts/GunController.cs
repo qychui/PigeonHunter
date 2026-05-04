@@ -1,4 +1,4 @@
-using UdonSharp;
+﻿using UdonSharp;
 using UnityEngine;
 
 namespace PigeonHunt
@@ -6,12 +6,23 @@ namespace PigeonHunt
     [AddComponentMenu("PigeonHunt/Gun Controller")]
     public class GunController : UdonSharpBehaviour
     {
+        private const int LaserDisplayOff = 0;
+        private const int LaserDisplayLineAndDot = 1;
+        private const int LaserDisplayDotOnly = 2;
+
         public Transform fireOrigin;
         public float fireCooldown = 0.25f;
         public float distance = 40f;
         public LayerMask hitMask = ~0;
         public ParticleSystem muzzleFlash;
         public AudioSource shootSfx;
+        public LineRenderer laserLine; 
+        public GameObject laserHitDot;
+        public float laserDistance = 100f;
+        public bool enableLaser;
+        public float doubleClickThreshold = 0.2f;
+        [Range(0, 2)] public int laserDisplayMode = LaserDisplayOff;
+        public float laserHitDotSurfaceOffset = 0.005f;
 
         [Header("Game State")]
         public GameManager gameManager;
@@ -20,15 +31,137 @@ namespace PigeonHunt
         [SerializeField] private bool logShots;
 
         private float lastFireTime;
+        private float lastUseDownTime = -10f;
 
         private void Start()
         {
+            if (laserDisplayMode == LaserDisplayOff && enableLaser)
+            {
+                laserDisplayMode = LaserDisplayLineAndDot;
+            }
 
+            SyncLaserState();
+        }
+
+        private void Update()
+        {
+            if (IsLaserDisplayActive())
+            {
+                FireLaser();
+            }
+            else
+            {
+                HideLaserDot();
+            }
+        }
+
+        void FireLaser()
+        {
+            var ray = new Ray(fireOrigin.position, fireOrigin.forward); 
+            RaycastHit hit;
+
+            if (Physics.Raycast(ray, out hit, laserDistance))
+            {
+                if (laserLine != null)
+                {
+                    laserLine.SetPosition(0, fireOrigin.position); 
+                    laserLine.SetPosition(1, hit.point); 
+                }
+
+                UpdateLaserDot(hit.point, hit.normal);
+            }
+            else
+            {
+                if (laserLine != null)
+                {
+                    laserLine.SetPosition(0, fireOrigin.position); 
+                    laserLine.SetPosition(1, ray.GetPoint(laserDistance)); 
+                }
+
+                HideLaserDot();
+            }
         }
 
         public override void OnPickupUseDown()
         {
+            var currentTime = Time.time;
+
+            if (currentTime - lastUseDownTime <= doubleClickThreshold)
+            {
+                CycleLaserDisplayMode();
+                lastUseDownTime = -10f;
+                return;
+            }
+
+            lastUseDownTime = currentTime;
+
             TryFire();
+        }
+
+        private void CycleLaserDisplayMode()
+        {
+            laserDisplayMode++;
+            if (laserDisplayMode > LaserDisplayDotOnly)
+            {
+                laserDisplayMode = LaserDisplayOff;
+            }
+
+            SyncLaserState();
+        }
+
+        private void SyncLaserState()
+        {
+            enableLaser = IsLaserDisplayActive();
+
+            if (laserLine != null)
+            {
+                laserLine.enabled = ShouldShowLaserLine();
+            }
+
+            if (!ShouldShowLaserDot())
+            {
+                HideLaserDot();
+            }
+        }
+
+        private bool IsLaserDisplayActive()
+        {
+            return laserDisplayMode != LaserDisplayOff;
+        }
+
+        private bool ShouldShowLaserLine()
+        {
+            return laserDisplayMode == LaserDisplayLineAndDot;
+        }
+
+        private bool ShouldShowLaserDot()
+        {
+            return laserDisplayMode == LaserDisplayLineAndDot || laserDisplayMode == LaserDisplayDotOnly;
+        }
+
+        private void UpdateLaserDot(Vector3 hitPoint, Vector3 hitNormal)
+        {
+            if (!ShouldShowLaserDot() || laserHitDot == null)
+            {
+                return;
+            }
+
+            var dotTransform = laserHitDot.transform;
+            dotTransform.position = hitPoint + (hitNormal * laserHitDotSurfaceOffset);
+            dotTransform.rotation = Quaternion.LookRotation(hitNormal);
+
+            if (!laserHitDot.activeSelf)
+            {
+                laserHitDot.SetActive(true);
+            }
+        }
+
+        private void HideLaserDot()
+        {
+            if (laserHitDot != null && laserHitDot.activeSelf)
+            {
+                laserHitDot.SetActive(false);
+            }
         }
 
         private bool TryFire()
@@ -36,11 +169,6 @@ namespace PigeonHunt
             var currentTime = Time.time;
 
             if (currentTime < lastFireTime + fireCooldown)
-            {
-                return false;
-            }
-
-            if (gameManager != null && !gameManager.TryRegisterShot())
             {
                 return false;
             }
@@ -55,21 +183,23 @@ namespace PigeonHunt
                 return false;
             }
 
-            lastFireTime = currentTime;
-
             var ray = new Ray(origin, direction);
-
             var didHit = Physics.Raycast(ray, out var hitInfo, distance, hitMask);
 
-            QychuiUtilities.SafePlay(muzzleFlash);
-            if (gameManager != null && gameManager.soundManager != null)
+            if (gameManager != null && gameManager.TryHandleModeOptionHit(didHit ? hitInfo.collider : null))
             {
-                gameManager.soundManager.PlayGunShot(shootSfx);
+                lastFireTime = currentTime;
+                PlayShotEffects();
+                return true;
             }
-            else
+
+            if (gameManager != null && !gameManager.TryRegisterShot())
             {
-                QychuiUtilities.SafePlay(shootSfx);
+                return false;
             }
+
+            lastFireTime = currentTime;
+            PlayShotEffects();
 
             if (logShots)
             {
@@ -89,6 +219,7 @@ namespace PigeonHunt
             {
                 var collider = hitInfo.collider;
                 var target = collider.GetComponent<PigeonTarget>();
+                var clayTarget = target == null ? collider.GetComponentInParent<ClayTarget>() : null;
 
                 if (target != null)
                 {
@@ -99,6 +230,16 @@ namespace PigeonHunt
                     target.OnShot(hitPoint, hitNormal);
 
                     Debug.Log("[<color=#0c824c>UdonSharp</color>] hitbox hit");
+                }
+                else if (clayTarget != null)
+                {
+                    hitPigeon = true;
+                    var hitPoint = hitInfo.point;
+                    var hitNormal = QychuiUtilities.GetSafeNormal(hitInfo.normal, -direction);
+
+                    clayTarget.OnShot(hitPoint, hitNormal);
+
+                    Debug.Log("[<color=#0c824c>UdonSharp</color>] clay hitbox hit");
                 }
                 else
                 {
@@ -113,5 +254,20 @@ namespace PigeonHunt
 
             return true;
         }
+
+        private void PlayShotEffects()
+        {
+            QychuiUtilities.SafePlay(muzzleFlash);
+            if (gameManager != null && gameManager.soundManager != null)
+            {
+                gameManager.soundManager.PlayGunShot(shootSfx);
+            }
+            else
+            {
+                QychuiUtilities.SafePlay(shootSfx);
+            }
+        }
+
     }
 }
+

@@ -22,6 +22,7 @@ namespace PigeonHunt
 
         [Header("Movement Area Reference")]
         [SerializeField] private RectTransform movementArea;
+        [SerializeField] private RectTransform shootingRangeMoveArea;
 
         [Header("Animator Parameters")]
         [SerializeField] private string stateParameter = "DogState";
@@ -160,6 +161,9 @@ namespace PigeonHunt
         [SerializeField] private float lmaoPauseDuration = 0.4f;
         [Min(0f)]
         [SerializeField] private float lmaoResetDelay = 5f;
+
+        [Header("Shooting Range Movement")]
+
 
         private int stateParameterHash;
         private int currentState = int.MinValue;

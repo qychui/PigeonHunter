@@ -18,7 +18,6 @@ namespace PigeonHunt
         private int pigeonsHitThisRound;
         private float spawnTimer;
         private float roundDifficultyBonus;
-        private float hitDifficultyBonus;
         private bool waitingForStartAnimation;
         private float startAnimationTimer = 0f;
         private float startDelayTime = 0f;
@@ -49,13 +48,6 @@ namespace PigeonHunt
         private int carryScoreValue;
 
         private Vector3[] cachedCorners = new Vector3[4];
-        private int[] edgeSelectionBuffer = new int[4];
-
-        private const int EdgeLeft = 0;
-        private const int EdgeRight = 1;
-        private const int EdgeTop = 2;
-        private const int EdgeBottom = 3;
-
         private const int DirectionRight = 0;
         private const int DirectionRightUp = 1;
         private const int DirectionRightDown = 2;
@@ -83,6 +75,11 @@ namespace PigeonHunt
             get { return gameLocked; }
         }
 
+        public bool HasStartedGameSession
+        {
+            get { return currentRoundIndex > 0; }
+        }
+
         public Vector3 GetRoundEndPigeonPosition()
         {
             if (manager == null || manager.pigeonPool == null)
@@ -104,8 +101,7 @@ namespace PigeonHunt
         {
             get
             {
-                float bonus = Mathf.Max(0f, roundDifficultyBonus + hitDifficultyBonus);
-                float multiplier = 1f + bonus;
+                float multiplier = 1f + Mathf.Max(0f, roundDifficultyBonus);
                 if (manager != null && manager.maxDifficultyMultiplier > 0f)
                 {
                     multiplier = Mathf.Min(multiplier, manager.maxDifficultyMultiplier);
@@ -169,6 +165,28 @@ namespace PigeonHunt
                     roundEndHitCountTriggered = true;
                     if (manager.uiController != null)
                     {
+                        if (isPerfectHit && !roundEndAudioTriggered)
+                        {
+                            roundEndAudioTriggered = true;
+                            manager.uiController.SetGoodActive(false);
+
+                            if (manager.soundManager != null)
+                            {
+                                var delay = Mathf.Max(0f, manager.soundManager.scoreCountAudioDuration);
+                                var duration = Mathf.Max(0f, manager.soundManager.fullHitAudioDuration);
+                                manager.uiController.ShowPerfectDisplay(delay, duration);
+                                manager.soundManager.PlayRoundClearSequence(true);
+                                roundEndLmaoAnimPending = false;
+                                roundEndLmaoAnimTimer = 0f;
+                            }
+                            else
+                            {
+                                manager.uiController.ShowPerfectDisplay(0f, 0f);
+                                roundEndLmaoAnimPending = false;
+                                roundEndLmaoAnimTimer = 0f;
+                            }
+                        }
+
                         if (manager.uiController.BeginRoundEndHitAnimation(isPerfectHit))
                         {
                             return;
@@ -202,10 +220,6 @@ namespace PigeonHunt
                     if (manager.uiController != null)
                     {
                         manager.uiController.SetGoodActive(showGoodResult);
-                        if (!showGoodResult)
-                        {
-                            manager.uiController.SetGameOverActive(!roundEndPassed);
-                        }
 
                         if (isPerfectHit)
                         {
@@ -234,6 +248,15 @@ namespace PigeonHunt
                         }
                         else
                         {
+                            if (manager.uiController != null)
+                            {
+                                manager.uiController.RefreshTopScoreOnGameOver();
+                                if (manager.uiController.gameOverTextObject != null && !manager.uiController.gameOverTextObject.activeSelf)
+                                {
+                                    manager.uiController.gameOverTextObject.SetActive(true);
+                                }
+                            }
+
                             manager.soundManager.PlayRoundFailSequence();
                             roundEndLmaoAnimPending = manager.animationController != null;
                             roundEndLmaoAnimTimer = Mathf.Max(0f, manager.soundManager.endAudioDuration);
@@ -266,6 +289,12 @@ namespace PigeonHunt
                 if (manager.soundManager != null && manager.soundManager.IsSequenceActive())
                 {
                     return;
+                }
+
+                if (!roundEndPassed && manager.uiController != null)
+                {
+                    manager.uiController.RefreshTopScoreOnGameOver();
+                    manager.uiController.SetGameOverActive(true);
                 }
 
                 var passedRound = roundEndPassed;
@@ -380,10 +409,7 @@ namespace PigeonHunt
             currentRoundIndex++;
             UpdateDifficultyForCurrentRound();
             ResetRoundRuntimeState();
-            hitDifficultyBonus = 0f;
             roundDifficultyBonus = CalculateRoundDifficultyBonus();
-
-            ClampHitDifficultyWithinLimit();
 
             ResetUIForCurrentRound();
 
@@ -427,6 +453,31 @@ namespace PigeonHunt
             {
                 roundEndAnimationTimer = Mathf.Max(0f, manager.animationController.GetResolutionAnimationDuration(lastResolutionWasHit));
             }
+        }
+
+        public void ForcePassCurrentRound()
+        {
+            if (!CanForceSettleRound())
+            {
+                return;
+            }
+
+            var requiredHits = GetRequiredHitsForDifficulty(GetDisplayedDifficultyLevel(), targetQuotaThisRound);
+            pigeonsHitThisRound = Mathf.Max(pigeonsHitThisRound, requiredHits);
+            UpdateHitDisplay();
+            PrepareForcedRoundSettlement();
+            EndRound();
+        }
+
+        public void ForceSettleCurrentRound()
+        {
+            if (!CanForceSettleRound())
+            {
+                return;
+            }
+
+            PrepareForcedRoundSettlement();
+            EndRound();
         }
 
         private void FinalizeEndRound()
@@ -482,6 +533,35 @@ namespace PigeonHunt
             manager.uiController.SetRoundLevel(Mathf.Min(99, GetDisplayedRoundNumber() + 1));
         }
 
+        private bool CanForceSettleRound()
+        {
+            if (manager == null)
+            {
+                return false;
+            }
+
+            if (!roundActive || roundEndPending || gameLocked)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        private void PrepareForcedRoundSettlement()
+        {
+            pigeonsResolvedThisRound = Mathf.Max(pigeonsResolvedThisRound, targetQuotaThisRound);
+            lastResolutionHadAnimation = false;
+            lastResolutionWasHit = false;
+
+            if (manager.uiController != null)
+            {
+                manager.uiController.ClearActivePigeonMask();
+            }
+
+            DespawnAllPigeons();
+        }
+
         public void RegisterPigeonHit(PigeonTarget pigeon)
         {
             if (manager == null)
@@ -500,7 +580,6 @@ namespace PigeonHunt
                 manager.uiController.AddScore(scoreAmount);
             }
             pigeonsHitThisRound++;
-            ApplyHitDifficultyBonus();
             UpdateHitDisplay();
         }
 
@@ -628,18 +707,8 @@ namespace PigeonHunt
             manager.PlayPigeonExitAnimation(null);
         }
 
-        private void RegisterPigeonMiss()
-        {
-            ReduceHitDifficultyBonus();
-        }
-
         private void HandleSinglePigeonResolution(bool wasHit)
         {
-            if (!wasHit)
-            {
-                RegisterPigeonMiss();
-            }
-
             pigeonsResolvedThisRound++;
 
             UpdateResolvedPigeonUI(wasHit);
@@ -665,7 +734,6 @@ namespace PigeonHunt
         {
             if (!wasHit)
             {
-                RegisterPigeonMiss();
                 pairWaveHadMiss = true;
             }
             else
@@ -869,59 +937,9 @@ namespace PigeonHunt
                 return false;
             }
 
-            int edgeCount = 0;
-            if (manager.allowLeftEdge)
-            {
-                edgeSelectionBuffer[edgeCount] = EdgeLeft;
-                edgeCount++;
-            }
-            if (manager.allowRightEdge)
-            {
-                edgeSelectionBuffer[edgeCount] = EdgeRight;
-                edgeCount++;
-            }
-            if (manager.allowTopEdge)
-            {
-                edgeSelectionBuffer[edgeCount] = EdgeTop;
-                edgeCount++;
-            }
-            if (manager.allowBottomEdge)
-            {
-                edgeSelectionBuffer[edgeCount] = EdgeBottom;
-                edgeCount++;
-            }
-
-            if (edgeCount == 0)
-            {
-                return false;
-            }
-
-            int selectedEdge = edgeSelectionBuffer[Random.Range(0, edgeCount)];
-
-            if (selectedEdge == EdgeLeft)
-            {
-                startPosition.x = minX;
-                startPosition.y = SampleWithin(minY, maxY, manager.leftEdgeSpawnSegment);
-                directionIndex = SampleLeftEdgeDirection();
-            }
-            else if (selectedEdge == EdgeRight)
-            {
-                startPosition.x = maxX;
-                startPosition.y = SampleWithin(minY, maxY, manager.rightEdgeSpawnSegment);
-                directionIndex = SampleRightEdgeDirection();
-            }
-            else if (selectedEdge == EdgeTop)
-            {
-                startPosition.y = maxY;
-                startPosition.x = SampleWithin(minX, maxX, manager.topEdgeSpawnSegment);
-                directionIndex = SampleTopEdgeDirection();
-            }
-            else
-            {
-                startPosition.y = minY;
-                startPosition.x = SampleWithin(minX, maxX, manager.bottomEdgeSpawnSegment);
-                directionIndex = SampleBottomEdgeDirection();
-            }
+            startPosition.y = minY;
+            startPosition.x = SampleWithin(minX, maxX, manager.bottomEdgeSpawnSegment);
+            directionIndex = SampleBottomEdgeDirection();
 
             startPosition.z = planeZ;
 
@@ -1152,7 +1170,6 @@ namespace PigeonHunt
         {
             currentRoundIndex = 0;
             roundDifficultyBonus = 0f;
-            hitDifficultyBonus = 0f;
             activeGameMode = GameModeSingle;
             currentDifficultyLevel = 0;
             gameLocked = false;
@@ -1236,7 +1253,7 @@ namespace PigeonHunt
                 return 0;
             }
 
-            return Mathf.Max(0, (roundIndex - 1) / 2);
+            return Mathf.Max(0, (roundIndex - 1) / 3);
         }
 
         private int GetDisplayedDifficultyLevel()
@@ -1260,37 +1277,6 @@ namespace PigeonHunt
             }
 
             return Mathf.Max(0, required);
-        }
-
-        private void ApplyHitDifficultyBonus()
-        {
-            var capacity = GetAvailableHitBonusCapacity();
-            if (capacity <= 0f)
-            {
-                return;
-            }
-
-            hitDifficultyBonus = Mathf.Min(hitDifficultyBonus + manager.hitDifficultyStep, capacity);
-        }
-
-        private void ReduceHitDifficultyBonus()
-        {
-            hitDifficultyBonus = Mathf.Max(0f, hitDifficultyBonus - manager.missDifficultyPenalty);
-        }
-
-        private float GetAvailableHitBonusCapacity()
-        {
-            var maxBonus = Mathf.Max(0f, manager.maxDifficultyMultiplier - 1f);
-            return Mathf.Max(0f, maxBonus - roundDifficultyBonus);
-        }
-
-        private void ClampHitDifficultyWithinLimit()
-        {
-            var capacity = GetAvailableHitBonusCapacity();
-            if (hitDifficultyBonus > capacity)
-            {
-                hitDifficultyBonus = capacity;
-            }
         }
 
         private int GetDisplayedRoundNumber()
@@ -1345,6 +1331,52 @@ namespace PigeonHunt
 
             waitingForStartAnimation = startAnimationTimer > 0f;
             manager.animationController.PlayGameStartAnimationWithAudio(useNextTiming);
+        }
+
+        public static Vector3 EvaluateClayHookTrajectory(
+            Vector3 startPosition,
+            Vector3 endPosition,
+            float peakHeight,
+            float lateralCurveAmount,
+            Vector3 rightAxis,
+            float normalizedTime,
+            float minAllowedY,
+            float maxAllowedY)
+        {
+            var t = Mathf.Clamp01(normalizedTime);
+            var basePosition = Vector3.Lerp(startPosition, endPosition, t);
+
+            var heightCurve = EvaluateClayHookHeight(t);
+            var lateralCurve = EvaluateClayHookLateral(t);
+
+            var position = basePosition;
+            position += Vector3.up * (heightCurve * peakHeight);
+            position += rightAxis * (lateralCurve * lateralCurveAmount);
+
+            if (maxAllowedY < minAllowedY)
+            {
+                var swap = minAllowedY;
+                minAllowedY = maxAllowedY;
+                maxAllowedY = swap;
+            }
+
+            var minClampWeight = Mathf.Clamp01((t - 0.04f) / 0.18f);
+            var dynamicMinAllowedY = Mathf.Lerp(startPosition.y, minAllowedY, minClampWeight);
+            position.y = Mathf.Clamp(position.y, dynamicMinAllowedY, maxAllowedY);
+            return position;
+        }
+
+        private static float EvaluateClayHookHeight(float t)
+        {
+            var rise = Mathf.Sin(t * Mathf.PI);
+            var forwardBias = Mathf.Lerp(1.15f, 0.55f, t);
+            var tailDrop = Mathf.Pow(t, 1.85f) * 0.7f;
+            return Mathf.Max(0f, (rise * forwardBias) - tailDrop);
+        }
+
+        private static float EvaluateClayHookLateral(float t)
+        {
+            return Mathf.Sin(t * Mathf.PI * 0.9f) * (1f - (0.55f * t));
         }
     }
 }

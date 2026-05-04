@@ -3,14 +3,23 @@ using UdonSharp;
 using UnityEngine;
 using VRC.SDKBase;
 using VRC.Udon;
+using PigeonHunt;
 
 namespace PigeonHunt 
 {
     public class UIController : UdonSharpBehaviour
     {
         [Header("Title Screen")]
+        public GameObject titleScreenObject;
+        public GameObject[] modeOption;
         public GameObject[] modeOptionArrows;
         public Material[] topScoreDigitMaterials;
+
+        [Header("ModeA & ModeB Scene")]
+        public GameObject modeABSceneObject;
+
+        [Header("Shooting Range Scene")]
+        public GameObject shootingRangeSceneObject;
 
         [Header("GunBar UI")]
         public int weaponType = 0;
@@ -32,6 +41,8 @@ namespace PigeonHunt
         public GameObject[] difficultyLevelObjects;
         [Tooltip("十只鸽子击中显示的对象，true代表该只鸽子被击落。")]
         public GameObject[] pigeonHitIndicators;
+        [Tooltip("十只移动靶击中显示的对象，true代表该只移动靶被击落。")]
+        public GameObject[] clayTargetHitIndicators;
         [Min(0f)]
         [Tooltip("回合结算时命中数动画的延迟间隔。")]
         public float pigeonHitCountAnimDelay = 0.3f;
@@ -74,6 +85,18 @@ namespace PigeonHunt
         public GameObject perfectBackgroundObject;
         public Material[] perfectScoreDigitMaterials;
 
+        [Header("Go UI")]
+        public GameObject goTextObject;
+        public GameObject goBackgroundObject;
+        [Min(0f)]
+        public float shootingRangeIntroDelayAfterRound = 0.5f;
+        [Min(0f)]
+        public float shootingRangeGoBlinkInterval = 0.25f;
+        [Min(0f)]
+        public float shootingRangeIntroDelayAfterGo = 0.5f;
+        [Min(1)]
+        public int shootingRangeGoBlinkCycles = 5;
+
         [Header("Round UI")]
         public GameObject roundBackgroundObject;
         public Material[] roundLevelTopDigitMaterials;
@@ -89,16 +112,29 @@ namespace PigeonHunt
         private bool _maskVisible;
         private bool _isMaskBlinking;
         private bool[] _pigeonHitStates;
+        private bool[] _clayTargetHitStates;
         private bool _hitCountAnimActive;
         private float _hitCountAnimTimer;
         private int _hitCountAnimStep;
         private int _hitCountAnimTotalSteps;
         private int _hitCountAnimCount;
         private int[] _hitCountAnimIndices;
+        private int[] _hitCountAnimTargets;
+        private bool _clayHitCountAnimActive;
+        private float _clayHitCountAnimTimer;
+        private int _clayHitCountAnimStep;
+        private int _clayHitCountAnimTotalSteps;
+        private int _clayHitCountAnimCount;
+        private int[] _clayHitCountAnimIndices;
+        private int[] _clayHitCountAnimTargets;
         private bool _fullHitAnimActive;
         private float _fullHitAnimTimer;
         private int _fullHitAnimStep;
         private int _fullHitAnimTotalSteps;
+        private bool _fullMaskAnimActive;
+        private float _fullMaskAnimTimer;
+        private int _fullMaskAnimStep;
+        private int _fullMaskAnimTotalSteps;
         private bool _roundDisplayActive;
         private float _roundDisplayTimer;
         private bool _perfectDisplayActive;
@@ -106,6 +142,17 @@ namespace PigeonHunt
         private float _perfectDisplayTimer;
         private bool _perfectAwardPending;
         private int _perfectAwardValue;
+        private int _selectedModeIndex;
+        private bool _shootingRangeIntroActive;
+        private int _shootingRangeIntroPhase;
+        private float _shootingRangeIntroTimer;
+        private int _shootingRangeGoBlinkStep;
+        private GameManager _shootingRangeIntroManager;
+        private const int ShootingRangeIntroPhaseNone = 0;
+        private const int ShootingRangeIntroPhaseWaitRoundDisplayComplete = 1;
+        private const int ShootingRangeIntroPhaseWaitAfterRound = 2;
+        private const int ShootingRangeIntroPhaseGoBlink = 3;
+        private const int ShootingRangeIntroPhaseWaitAfterGo = 4;
 
         void Start()
         {
@@ -116,9 +163,12 @@ namespace PigeonHunt
         {
             TickFullHitAnimation();
             TickHitCountAnimation();
+            TickClayHitCountAnimation();
+            TickFullMaskAnimation();
             TickMaskBlink();
             TickRoundDisplay();
             TickPerfectDisplay();
+            TickShootingRangeIntro();
         }
 
         private void OnValidate()
@@ -184,6 +234,39 @@ namespace PigeonHunt
         public void SetGameOverActive(bool active)
         {
             SetGameObjectActive(gameOverTextObject, active);
+            SetTitleScreenActive(active);
+        }
+
+        public void SetTitleScreenActive(bool active)
+        {
+            SetGameObjectActive(titleScreenObject, active);
+        }
+
+        public bool IsTitleScreenVisible()
+        {
+            return titleScreenObject != null && titleScreenObject.activeInHierarchy;
+        }
+
+        public bool TryHandleModeOptionHit(Collider hitCollider, GameManager gameManager)
+        {
+            var hitIndex = FindModeOptionIndex(hitCollider);
+            if (hitIndex < 0)
+            {
+                return false;
+            }
+
+            if (hitIndex != _selectedModeIndex)
+            {
+                SetSelectedModeIndex(hitIndex);
+                return true;
+            }
+
+            if (gameManager != null)
+            {
+                gameManager.HandleConfirmedModeSelection(hitIndex);
+            }
+
+            return true;
         }
 
         public void SetGoodActive(bool active)
@@ -258,6 +341,33 @@ namespace PigeonHunt
             _roundDisplayTimer = duration;
         }
 
+        public void PlayShootingRangeIntro(GameManager manager)
+        {
+            _shootingRangeIntroManager = manager;
+            _shootingRangeIntroActive = true;
+            _shootingRangeIntroPhase = ShootingRangeIntroPhaseWaitRoundDisplayComplete;
+            _shootingRangeIntroTimer = 0f;
+            _shootingRangeGoBlinkStep = 0;
+
+            ShowRoundDisplay();
+            SetGoDisplay(false, false);
+
+            if (manager != null && manager.soundManager != null)
+            {
+                QychuiUtilities.SafePlay(manager.soundManager.roundStartModeCAudio);
+            }
+        }
+
+        public void CancelShootingRangeIntro()
+        {
+            _shootingRangeIntroActive = false;
+            _shootingRangeIntroPhase = ShootingRangeIntroPhaseNone;
+            _shootingRangeIntroTimer = 0f;
+            _shootingRangeGoBlinkStep = 0;
+            _shootingRangeIntroManager = null;
+            SetGoDisplay(false, false);
+        }
+
         public void SetRoundLevel(int roundNumber)
         {
             roundLevel = Mathf.Clamp(roundNumber, 0, 99);
@@ -269,6 +379,23 @@ namespace PigeonHunt
         {
             scoreCurrent = Mathf.Clamp(newScore, 0, maxScore);
             UpdateScoreDigits();
+        }
+
+        public void RefreshTopScoreOnGameOver()
+        {
+            var topScoreMax = GetDigitCapacityMax(topScoreDigitMaterials);
+            var scoreToCompare = scoreCurrent;
+            if (topScoreMax > 0)
+            {
+                scoreToCompare = Mathf.Clamp(scoreToCompare, 0, topScoreMax);
+            }
+
+            if (scoreToCompare > _topScoreValue)
+            {
+                _topScoreValue = scoreToCompare;
+            }
+
+            UpdateTopScoreDigits();
         }
 
         public void AddScore(int amount)
@@ -386,6 +513,34 @@ namespace PigeonHunt
             ClearCurrentMask();
         }
 
+        public void SetClayTargetHitState(int index, bool wasHit)
+        {
+            EnsureClayTargetHitStateBuffer();
+            if (_clayTargetHitStates == null || index < 0 || index >= _clayTargetHitStates.Length)
+            {
+                return;
+            }
+
+            _clayTargetHitStates[index] = wasHit;
+            UpdateClayTargetHitIndicatorAt(index);
+        }
+
+        public void ClearClayTargetHitIndicators()
+        {
+            _clayHitCountAnimActive = false;
+            _fullMaskAnimActive = false;
+            EnsureClayTargetHitStateBuffer();
+            if (_clayTargetHitStates != null)
+            {
+                for (int i = 0; i < _clayTargetHitStates.Length; i++)
+                {
+                    _clayTargetHitStates[i] = false;
+                }
+            }
+
+            UpdateClayTargetHitIndicators();
+        }
+
         public void SetPigeonHitState(int index, bool wasHit)
         {
             EnsureHitStateBuffer();
@@ -439,15 +594,47 @@ namespace PigeonHunt
             _fullHitAnimActive = false;
             EnsureHitCountAnimBuffer();
 
-            _hitCountAnimCount = 0;
+            var count = 0;
             for (int i = 0; i < pigeonHitIndicators.Length; i++)
             {
                 var indicator = pigeonHitIndicators[i];
                 if (indicator != null && indicator.activeSelf)
                 {
-                    _hitCountAnimIndices[_hitCountAnimCount] = i;
-                    _hitCountAnimCount++;
+                    count++;
                 }
+            }
+
+            if (count <= 0)
+            {
+                _hitCountAnimActive = false;
+                return false;
+            }
+
+            _hitCountAnimCount = 0;
+            var simulatedStates = new bool[_pigeonHitStates.Length];
+            for (int i = 0; i < _pigeonHitStates.Length; i++)
+            {
+                simulatedStates[i] = _pigeonHitStates[i];
+            }
+
+            for (int targetIndex = 0; targetIndex < count; targetIndex++)
+            {
+                if (targetIndex < simulatedStates.Length && simulatedStates[targetIndex])
+                {
+                    continue;
+                }
+
+                var sourceIndex = FindLastActivePigeonIndicatorAfter(targetIndex, simulatedStates);
+                if (sourceIndex < 0 || sourceIndex == targetIndex)
+                {
+                    continue;
+                }
+
+                _hitCountAnimIndices[_hitCountAnimCount] = sourceIndex;
+                _hitCountAnimTargets[_hitCountAnimCount] = targetIndex;
+                _hitCountAnimCount++;
+                simulatedStates[sourceIndex] = false;
+                simulatedStates[targetIndex] = true;
             }
 
             if (_hitCountAnimCount <= 0)
@@ -466,16 +653,29 @@ namespace PigeonHunt
 
         public bool IsHitCountAnimationActive()
         {
-            return _hitCountAnimActive;
+            return _hitCountAnimActive || _clayHitCountAnimActive || _fullHitAnimActive || _fullMaskAnimActive;
+        }
+
+        public bool BeginClayRoundEndHitAnimation(bool isFullHit)
+        {
+            if (isFullHit)
+            {
+                return BeginClayFullHitAnimation();
+            }
+
+            return BeginClayHitCountAnimation();
         }
 
         private void RefreshAll()
         {
+            InitializeModeSelection();
+            UpdateTopScoreDigits();
             UpdateRoundDigits();
             UpdateRoundScoreDigits();
             UpdateScoreDigits();
             UpdateDifficultyObjects();
             ClearPigeonHitIndicators();
+            ClearClayTargetHitIndicators();
             SetGoodActive(false);
             ClearPerfectDisplay();
             UpdateWeaponIcons();
@@ -484,6 +684,106 @@ namespace PigeonHunt
             SetGameObjectActive(roundBackgroundObject, false);
             _roundDisplayActive = false;
             _roundDisplayTimer = 0f;
+        }
+
+        private void InitializeModeSelection()
+        {
+            _selectedModeIndex = GetInitialSelectedModeIndex();
+            ApplyModeSelectionVisuals();
+        }
+
+        private int GetInitialSelectedModeIndex()
+        {
+            var optionCount = GetModeOptionCount();
+            if (optionCount <= 0)
+            {
+                return 0;
+            }
+
+            if (modeOptionArrows != null)
+            {
+                for (int i = 0; i < optionCount; i++)
+                {
+                    var arrow = modeOptionArrows[i];
+                    if (arrow != null && arrow.activeSelf)
+                    {
+                        return i;
+                    }
+                }
+            }
+
+            return 0;
+        }
+
+        private void SetSelectedModeIndex(int index)
+        {
+            var optionCount = GetModeOptionCount();
+            if (optionCount <= 0)
+            {
+                _selectedModeIndex = 0;
+                return;
+            }
+
+            _selectedModeIndex = Mathf.Clamp(index, 0, optionCount - 1);
+            ApplyModeSelectionVisuals();
+        }
+
+        private void ApplyModeSelectionVisuals()
+        {
+            if (modeOptionArrows == null || modeOptionArrows.Length == 0)
+            {
+                return;
+            }
+
+            var optionCount = GetModeOptionCount();
+            for (int i = 0; i < modeOptionArrows.Length; i++)
+            {
+                var arrow = modeOptionArrows[i];
+                if (arrow == null)
+                {
+                    continue;
+                }
+
+                var shouldActive = i < optionCount && i == _selectedModeIndex;
+                SetGameObjectActive(arrow, shouldActive);
+            }
+        }
+
+        private int FindModeOptionIndex(Collider hitCollider)
+        {
+            if (hitCollider == null || modeOption == null || modeOption.Length == 0)
+            {
+                return -1;
+            }
+
+            var optionCount = GetModeOptionCount();
+            var hitTransform = hitCollider.transform;
+            for (int i = 0; i < optionCount; i++)
+            {
+                var optionObject = modeOption[i];
+                if (optionObject == null)
+                {
+                    continue;
+                }
+
+                var optionTransform = optionObject.transform;
+                if (hitTransform == optionTransform || hitTransform.IsChildOf(optionTransform) || optionTransform.IsChildOf(hitTransform))
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        private int GetModeOptionCount()
+        {
+            if (modeOption == null || modeOptionArrows == null)
+            {
+                return 0;
+            }
+
+            return Mathf.Min(modeOption.Length, modeOptionArrows.Length);
         }
 
         private void UpdateRoundDigits()
@@ -518,6 +818,21 @@ namespace PigeonHunt
             WriteNumberToDigitMaterials(scoreDigitMaterials, scoreCurrent);
         }
 
+        private void UpdateTopScoreDigits()
+        {
+            var capacityMax = GetDigitCapacityMax(topScoreDigitMaterials);
+            if (capacityMax > 0)
+            {
+                _topScoreValue = Mathf.Clamp(_topScoreValue, 0, capacityMax);
+            }
+            else
+            {
+                _topScoreValue = Mathf.Max(0, _topScoreValue);
+            }
+
+            WriteNumberToDigitMaterials(topScoreDigitMaterials, _topScoreValue);
+        }
+
         private void UpdateDifficultyObjects()
         {
             if (difficultyLevelObjects == null || difficultyLevelObjects.Length == 0)
@@ -525,7 +840,7 @@ namespace PigeonHunt
                 return;
             }
 
-            var activeCount = Mathf.Clamp(difficulty, 0, difficultyLevelObjects.Length);
+            var activeCount = difficultyLevelObjects.Length - Mathf.Clamp(difficulty, 0, difficultyLevelObjects.Length);
             for (int i = 0; i < difficultyLevelObjects.Length; i++)
             {
                 SetGameObjectActive(difficultyLevelObjects[i], i < activeCount);
@@ -544,6 +859,21 @@ namespace PigeonHunt
             for (int i = 0; i < pigeonHitIndicators.Length; i++)
             {
                 UpdateHitIndicatorAt(i);
+            }
+        }
+
+        private void UpdateClayTargetHitIndicators()
+        {
+            if (clayTargetHitIndicators == null || clayTargetHitIndicators.Length == 0)
+            {
+                return;
+            }
+
+            EnsureClayTargetHitStateBuffer();
+
+            for (int i = 0; i < clayTargetHitIndicators.Length; i++)
+            {
+                UpdateClayTargetHitIndicatorAt(i);
             }
         }
 
@@ -567,6 +897,23 @@ namespace PigeonHunt
             }
 
             var shouldActive = _pigeonHitStates != null && index < _pigeonHitStates.Length && _pigeonHitStates[index];
+            SetGameObjectActive(indicator, shouldActive);
+        }
+
+        private void UpdateClayTargetHitIndicatorAt(int index)
+        {
+            if (clayTargetHitIndicators == null || index < 0 || index >= clayTargetHitIndicators.Length)
+            {
+                return;
+            }
+
+            var indicator = clayTargetHitIndicators[index];
+            if (indicator == null)
+            {
+                return;
+            }
+
+            var shouldActive = _clayTargetHitStates != null && index < _clayTargetHitStates.Length && _clayTargetHitStates[index];
             SetGameObjectActive(indicator, shouldActive);
         }
 
@@ -599,23 +946,35 @@ namespace PigeonHunt
 
             var hitIndex = _hitCountAnimStep / 2;
             var disableSource = (_hitCountAnimStep % 2) == 0;
+            var indicatorIndex = _hitCountAnimIndices[hitIndex];
+            var targetIndex = _hitCountAnimTargets != null && hitIndex < _hitCountAnimTargets.Length
+                ? _hitCountAnimTargets[hitIndex]
+                : hitIndex;
+            var hasMove = indicatorIndex != targetIndex;
 
             if (disableSource)
             {
-                SetHitIndicatorActiveRaw(_hitCountAnimIndices[hitIndex], false);
+                if (hasMove)
+                {
+                    if (soundManager != null)
+                    {
+                        soundManager.PlayHitCount(hitSfx);
+                    }
+                    else
+                    {
+                        QychuiUtilities.SafePlay(hitSfx);
+                    }
+
+                    SetHitIndicatorVisualActive(indicatorIndex, false);
+                }
             }
             else
             {
-                if (soundManager != null)
+                if (hasMove)
                 {
-                    soundManager.PlayHitCount(hitSfx);
+                    SetHitIndicatorActiveRaw(indicatorIndex, false);
+                    SetHitIndicatorActiveRaw(targetIndex, true);
                 }
-                else
-                {
-                    QychuiUtilities.SafePlay(hitSfx);
-                }
-
-                SetHitIndicatorActiveRaw(hitIndex, true);
             }
 
             _hitCountAnimStep++;
@@ -627,6 +986,77 @@ namespace PigeonHunt
             }
 
             _hitCountAnimTimer = Mathf.Max(0f, pigeonHitCountAnimDelay);
+        }
+
+        private void TickClayHitCountAnimation()
+        {
+            if (_fullMaskAnimActive)
+            {
+                return;
+            }
+
+            if (!_clayHitCountAnimActive)
+            {
+                return;
+            }
+
+            if (_clayHitCountAnimStep >= _clayHitCountAnimTotalSteps)
+            {
+                _clayHitCountAnimActive = false;
+                return;
+            }
+
+            if (_clayHitCountAnimTimer > 0f)
+            {
+                _clayHitCountAnimTimer -= Time.deltaTime;
+                if (_clayHitCountAnimTimer > 0f)
+                {
+                    return;
+                }
+            }
+
+            var hitIndex = _clayHitCountAnimStep / 2;
+            var disableSource = (_clayHitCountAnimStep % 2) == 0;
+            var indicatorIndex = _clayHitCountAnimIndices[hitIndex];
+            var targetIndex = _clayHitCountAnimTargets != null && hitIndex < _clayHitCountAnimTargets.Length
+                ? _clayHitCountAnimTargets[hitIndex]
+                : hitIndex;
+            var hasMove = indicatorIndex != targetIndex;
+
+            if (disableSource)
+            {
+                if (hasMove)
+                {
+                    if (soundManager != null)
+                    {
+                        soundManager.PlayHitCount(hitSfx);
+                    }
+                    else
+                    {
+                        QychuiUtilities.SafePlay(hitSfx);
+                    }
+
+                    SetClayHitIndicatorVisualActive(indicatorIndex, false);
+                }
+            }
+            else
+            {
+                if (hasMove)
+                {
+                    SetClayHitIndicatorActiveRaw(indicatorIndex, false);
+                    SetClayHitIndicatorActiveRaw(targetIndex, true);
+                }
+            }
+
+            _clayHitCountAnimStep++;
+
+            if (_clayHitCountAnimStep >= _clayHitCountAnimTotalSteps)
+            {
+                _clayHitCountAnimActive = false;
+                return;
+            }
+
+            _clayHitCountAnimTimer = Mathf.Max(0f, pigeonHitCountAnimDelay);
         }
 
         private bool BeginFullHitAnimation()
@@ -649,6 +1079,117 @@ namespace PigeonHunt
             _fullHitAnimTotalSteps = cycles * 2;
             _fullHitAnimTimer = 0f;
 
+            return true;
+        }
+
+        private bool BeginClayHitCountAnimation()
+        {
+            if (clayTargetHitIndicators == null || clayTargetHitIndicators.Length == 0)
+            {
+                return false;
+            }
+
+            _fullMaskAnimActive = false;
+            EnsureClayHitCountAnimBuffer();
+
+            var count = 0;
+            for (int i = 0; i < clayTargetHitIndicators.Length; i++)
+            {
+                var indicator = clayTargetHitIndicators[i];
+                if (indicator != null && indicator.activeSelf)
+                {
+                    count++;
+                }
+            }
+
+            if (count <= 0)
+            {
+                _clayHitCountAnimActive = false;
+                return false;
+            }
+
+            _clayHitCountAnimCount = 0;
+            var simulatedStates = new bool[_clayTargetHitStates.Length];
+            for (int i = 0; i < _clayTargetHitStates.Length; i++)
+            {
+                simulatedStates[i] = _clayTargetHitStates[i];
+            }
+
+            for (int targetIndex = 0; targetIndex < count; targetIndex++)
+            {
+                if (targetIndex < simulatedStates.Length && simulatedStates[targetIndex])
+                {
+                    continue;
+                }
+
+                var sourceIndex = FindLastActiveClayIndicatorAfter(targetIndex, simulatedStates);
+                if (sourceIndex < 0 || sourceIndex == targetIndex)
+                {
+                    continue;
+                }
+
+                _clayHitCountAnimIndices[_clayHitCountAnimCount] = sourceIndex;
+                _clayHitCountAnimTargets[_clayHitCountAnimCount] = targetIndex;
+                _clayHitCountAnimCount++;
+                simulatedStates[sourceIndex] = false;
+                simulatedStates[targetIndex] = true;
+            }
+
+            if (_clayHitCountAnimCount <= 0)
+            {
+                _clayHitCountAnimActive = false;
+                return false;
+            }
+
+            _clayHitCountAnimActive = true;
+            _clayHitCountAnimStep = 0;
+            _clayHitCountAnimTotalSteps = _clayHitCountAnimCount * 2;
+            _clayHitCountAnimTimer = 0f;
+            return true;
+        }
+
+        private bool BeginClayFullHitAnimation()
+        {
+            if (clayTargetHitIndicators == null || clayTargetHitIndicators.Length == 0)
+            {
+                return false;
+            }
+
+            var cycles = Mathf.Max(0, fullHitBlinkCycles);
+            if (cycles <= 0)
+            {
+                _fullMaskAnimActive = false;
+                return false;
+            }
+
+            _fullMaskAnimActive = true;
+            _clayHitCountAnimActive = false;
+            _fullMaskAnimStep = 0;
+            _fullMaskAnimTotalSteps = cycles * 2;
+            _fullMaskAnimTimer = 0f;
+            return true;
+        }
+
+        private bool BeginFullMaskAnimation()
+        {
+            if (pigeonMaskObjects == null || pigeonMaskObjects.Length == 0)
+            {
+                return false;
+            }
+
+            var cycles = Mathf.Max(0, fullHitBlinkCycles);
+            if (cycles <= 0)
+            {
+                _fullMaskAnimActive = false;
+                return false;
+            }
+
+            ClearActivePigeonMask();
+            _fullMaskAnimActive = true;
+            _clayHitCountAnimActive = false;
+            _fullMaskAnimStep = 0;
+            _fullMaskAnimTotalSteps = cycles * 2;
+            _fullMaskAnimTimer = 0f;
             return true;
         }
 
@@ -688,6 +1229,43 @@ namespace PigeonHunt
             }
 
             _fullHitAnimTimer = Mathf.Max(0f, fullHitBlinkDelay);
+        }
+
+        private void TickFullMaskAnimation()
+        {
+            if (!_fullMaskAnimActive)
+            {
+                return;
+            }
+
+            if (_fullMaskAnimStep >= _fullMaskAnimTotalSteps)
+            {
+                _fullMaskAnimActive = false;
+                UpdateClayTargetHitIndicators();
+                return;
+            }
+
+            if (_fullMaskAnimTimer > 0f)
+            {
+                _fullMaskAnimTimer -= Time.deltaTime;
+                if (_fullMaskAnimTimer > 0f)
+                {
+                    return;
+                }
+            }
+
+            var showIndicators = (_fullMaskAnimStep % 2) == 1;
+            SetAllClayHitIndicatorsActive(showIndicators);
+            _fullMaskAnimStep++;
+
+            if (_fullMaskAnimStep >= _fullMaskAnimTotalSteps)
+            {
+                _fullMaskAnimActive = false;
+                UpdateClayTargetHitIndicators();
+                return;
+            }
+
+            _fullMaskAnimTimer = Mathf.Max(0f, fullHitBlinkDelay);
         }
 
         private void TickMaskBlink()
@@ -778,6 +1356,68 @@ namespace PigeonHunt
             EndPerfectDisplay(true);
         }
 
+        private void TickShootingRangeIntro()
+        {
+            if (!_shootingRangeIntroActive)
+            {
+                return;
+            }
+
+            if (_shootingRangeIntroPhase == ShootingRangeIntroPhaseWaitRoundDisplayComplete)
+            {
+                if (_roundDisplayActive)
+                {
+                    return;
+                }
+
+                _shootingRangeIntroPhase = ShootingRangeIntroPhaseWaitAfterRound;
+                _shootingRangeIntroTimer = Mathf.Max(0f, shootingRangeIntroDelayAfterRound);
+            }
+
+            _shootingRangeIntroTimer -= Time.deltaTime;
+            if (_shootingRangeIntroTimer > 0f)
+            {
+                return;
+            }
+
+            if (_shootingRangeIntroPhase == ShootingRangeIntroPhaseWaitAfterRound)
+            {
+                _shootingRangeIntroPhase = ShootingRangeIntroPhaseGoBlink;
+                _shootingRangeGoBlinkStep = 0;
+                SetGoDisplay(true, true);
+                _shootingRangeIntroTimer = Mathf.Max(0.01f, shootingRangeGoBlinkInterval);
+                return;
+            }
+
+            if (_shootingRangeIntroPhase == ShootingRangeIntroPhaseGoBlink)
+            {
+                var showText = (_shootingRangeGoBlinkStep % 2) == 0;
+                SetGoDisplay(true, showText);
+                _shootingRangeGoBlinkStep++;
+
+                if (_shootingRangeGoBlinkStep >= Mathf.Max(1, shootingRangeGoBlinkCycles) * 2)
+                {
+                    SetGoDisplay(false, false);
+                    _shootingRangeIntroPhase = ShootingRangeIntroPhaseWaitAfterGo;
+                    _shootingRangeIntroTimer = Mathf.Max(0f, shootingRangeIntroDelayAfterGo);
+                    return;
+                }
+
+                _shootingRangeIntroTimer = Mathf.Max(0.01f, shootingRangeGoBlinkInterval);
+                return;
+            }
+
+            if (_shootingRangeIntroPhase == ShootingRangeIntroPhaseWaitAfterGo)
+            {
+                var manager = _shootingRangeIntroManager;
+                CancelShootingRangeIntro();
+                if (manager != null)
+                {
+                    manager.OnShootingRangeIntroFinished();
+                }
+            }
+        }
+
         private void EndPerfectDisplay(bool awardScore)
         {
             var shouldAward = awardScore && _perfectAwardPending;
@@ -838,12 +1478,28 @@ namespace PigeonHunt
             }
         }
 
+        private void EnsureClayTargetHitStateBuffer()
+        {
+            if (clayTargetHitIndicators == null || clayTargetHitIndicators.Length == 0)
+            {
+                _clayTargetHitStates = null;
+                return;
+            }
+
+            var desired = clayTargetHitIndicators.Length;
+            if (_clayTargetHitStates == null || _clayTargetHitStates.Length != desired)
+            {
+                _clayTargetHitStates = new bool[desired];
+            }
+        }
+
         private void EnsureHitCountAnimBuffer()
         {
             var desired = pigeonHitIndicators != null ? pigeonHitIndicators.Length : 0;
             if (desired <= 0)
             {
                 _hitCountAnimIndices = null;
+                _hitCountAnimTargets = null;
                 return;
             }
 
@@ -851,6 +1507,70 @@ namespace PigeonHunt
             {
                 _hitCountAnimIndices = new int[desired];
             }
+
+            if (_hitCountAnimTargets == null || _hitCountAnimTargets.Length != desired)
+            {
+                _hitCountAnimTargets = new int[desired];
+            }
+        }
+
+        private void EnsureClayHitCountAnimBuffer()
+        {
+            var desired = clayTargetHitIndicators != null ? clayTargetHitIndicators.Length : 0;
+            if (desired <= 0)
+            {
+                _clayHitCountAnimIndices = null;
+                _clayHitCountAnimTargets = null;
+                return;
+            }
+
+            if (_clayHitCountAnimIndices == null || _clayHitCountAnimIndices.Length != desired)
+            {
+                _clayHitCountAnimIndices = new int[desired];
+            }
+
+            if (_clayHitCountAnimTargets == null || _clayHitCountAnimTargets.Length != desired)
+            {
+                _clayHitCountAnimTargets = new int[desired];
+            }
+        }
+
+        private int FindLastActiveClayIndicatorAfter(int minIndexExclusive, bool[] states)
+        {
+            if (clayTargetHitIndicators == null || states == null)
+            {
+                return -1;
+            }
+
+            var startIndex = Mathf.Min(clayTargetHitIndicators.Length, states.Length) - 1;
+            for (int i = startIndex; i > minIndexExclusive; i--)
+            {
+                if (states[i])
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        private int FindLastActivePigeonIndicatorAfter(int minIndexExclusive, bool[] states)
+        {
+            if (pigeonHitIndicators == null || states == null)
+            {
+                return -1;
+            }
+
+            var startIndex = Mathf.Min(pigeonHitIndicators.Length, states.Length) - 1;
+            for (int i = startIndex; i > minIndexExclusive; i--)
+            {
+                if (states[i])
+                {
+                    return i;
+                }
+            }
+
+            return -1;
         }
 
         private void SetHitIndicatorActiveRaw(int index, bool active)
@@ -873,6 +1593,54 @@ namespace PigeonHunt
             }
         }
 
+        private void SetClayHitIndicatorActiveRaw(int index, bool active)
+        {
+            if (clayTargetHitIndicators == null || index < 0 || index >= clayTargetHitIndicators.Length)
+            {
+                return;
+            }
+
+            var indicator = clayTargetHitIndicators[index];
+            if (indicator != null)
+            {
+                SetGameObjectActive(indicator, active);
+            }
+
+            EnsureClayTargetHitStateBuffer();
+            if (_clayTargetHitStates != null && index < _clayTargetHitStates.Length)
+            {
+                _clayTargetHitStates[index] = active;
+            }
+        }
+
+        private void SetClayHitIndicatorVisualActive(int index, bool active)
+        {
+            if (clayTargetHitIndicators == null || index < 0 || index >= clayTargetHitIndicators.Length)
+            {
+                return;
+            }
+
+            var indicator = clayTargetHitIndicators[index];
+            if (indicator != null)
+            {
+                SetGameObjectActive(indicator, active);
+            }
+        }
+
+        private void SetHitIndicatorVisualActive(int index, bool active)
+        {
+            if (pigeonHitIndicators == null || index < 0 || index >= pigeonHitIndicators.Length)
+            {
+                return;
+            }
+
+            var indicator = pigeonHitIndicators[index];
+            if (indicator != null)
+            {
+                SetGameObjectActive(indicator, active);
+            }
+        }
+
         private void SetAllHitIndicatorsActive(bool active)
         {
             if (pigeonHitIndicators == null || pigeonHitIndicators.Length == 0)
@@ -889,6 +1657,32 @@ namespace PigeonHunt
             for (int i = 0; i < count; i++)
             {
                 SetGameObjectActive(pigeonHitIndicators[i], active);
+            }
+        }
+
+        private void SetAllMasksActive(bool active)
+        {
+            if (pigeonMaskObjects == null || pigeonMaskObjects.Length == 0)
+            {
+                return;
+            }
+
+            for (int i = 0; i < pigeonMaskObjects.Length; i++)
+            {
+                SetGameObjectActive(pigeonMaskObjects[i], active);
+            }
+        }
+
+        private void SetAllClayHitIndicatorsActive(bool active)
+        {
+            if (clayTargetHitIndicators == null || clayTargetHitIndicators.Length == 0)
+            {
+                return;
+            }
+
+            for (int i = 0; i < clayTargetHitIndicators.Length; i++)
+            {
+                SetClayHitIndicatorActiveRaw(i, active);
             }
         }
 
@@ -1001,6 +1795,12 @@ namespace PigeonHunt
             {
                 target.SetActive(shouldBeActive);
             }
+        }
+
+        private void SetGoDisplay(bool backgroundActive, bool textActive)
+        {
+            SetGameObjectActive(goBackgroundObject, backgroundActive);
+            SetGameObjectActive(goTextObject, textActive);
         }
 
         private void SetDigitMaterialValue(Material material, int digit)

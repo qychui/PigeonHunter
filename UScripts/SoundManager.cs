@@ -14,7 +14,9 @@ public class SoundManager : UdonSharpBehaviour
     public AudioSource getAudio;
 
     [Header("Round Audio")]
+    public AudioSource titleScreenAudio;
     public AudioSource roundStartAudio;
+    public AudioSource roundStartModeCAudio;
     public AudioSource roundNextAudio;
     public AudioSource endAudio;
     public AudioSource endLmaoAudio;
@@ -22,20 +24,24 @@ public class SoundManager : UdonSharpBehaviour
     [FormerlySerializedAs("nextAudio")]
     public AudioSource fullHitAudio;
     [Min(0f)]
-    public float endAudioDuration = 0f;
+    public float endAudioDuration = 2.5f;
     [Min(0f)]
-    public float endLmaoAudioDuration = 0f;
+    public float endLmaoAudioDuration = 4f;
     [Min(0f)]
-    public float scoreCountAudioDuration = 0f;
+    public float scoreCountAudioDuration = 4.5f;
     [FormerlySerializedAs("nextAudioDuration")]
     [Min(0f)]
-    public float fullHitAudioDuration = 0f;
+    public float fullHitAudioDuration = 3f;
     [Min(0f)]
     public float playRoundNextAudioDelay = 1f;
+
+    [Header("Gun Audio")]
+    public AudioSource shootAudio;
 
     private const int SequenceNone = 0;
     private const int SequenceRoundClear = 1;
     private const int SequenceRoundFail = 2;
+    private const int SequenceRoundFailNoDog = 3;
 
     private int activeSequence = SequenceNone;
     private int sequenceStep;
@@ -114,6 +120,11 @@ public class SoundManager : UdonSharpBehaviour
     public void PlayRoundFailSequence()
     {
         StartSequence(SequenceRoundFail, false);
+    }
+
+    public void PlayRoundFailSequenceWithoutDog()
+    {
+        StartSequence(SequenceRoundFailNoDog, false);
     }
 
     public void StopAll()
@@ -231,6 +242,11 @@ public class SoundManager : UdonSharpBehaviour
             return step == 0 ? endAudio : endLmaoAudio;
         }
 
+        if (sequence == SequenceRoundFailNoDog)
+        {
+            return step == 0 ? endAudio : endLmaoAudio;
+        }
+
         return null;
     }
 
@@ -246,6 +262,11 @@ public class SoundManager : UdonSharpBehaviour
             return Mathf.Max(0f, step == 0 ? endAudioDuration : endLmaoAudioDuration);
         }
 
+        if (sequence == SequenceRoundFailNoDog)
+        {
+            return Mathf.Max(0f, step == 0 ? endAudioDuration : endLmaoAudioDuration);
+        }
+
         return 0f;
     }
 
@@ -253,6 +274,7 @@ public class SoundManager : UdonSharpBehaviour
     {
         return sequence == SequenceRoundClear ? step >= (sequenceFullHit ? 2 : 1) :
                sequence == SequenceRoundFail ? step >= 2 :
+               sequence == SequenceRoundFailNoDog ? step >= 2 :
                true;
     }
 }
