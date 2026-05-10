@@ -26,6 +26,18 @@ namespace PigeonHunt
         private int pairWavePendingResolutions;
         private bool pairWaveHadHit;
         private bool pairWaveHadMiss;
+        private int pairWaveHitCount;
+        private bool pairWaveSecondSpawnPending;
+        private float pairWaveSecondSpawnTimer;
+        private int pairWaveFirstSpawnIndex;
+        private PigeonColorType pairWaveFirstHitColor;
+        private PigeonColorType pairWaveSecondHitColor;
+        private PigeonTarget pairWaveFirstPigeon;
+        private PigeonTarget pairWaveSecondPigeon;
+        private int pairWaveFirstUiIndex = -1;
+        private int pairWaveSecondUiIndex = -1;
+        private Vector3 pairWaveLastHitPosition;
+        private bool pairWaveHasLastHitPosition;
         private bool waveActive;
         private int shotsUsedThisWave;
         private bool pendingExitOnMiss;
@@ -42,6 +54,7 @@ namespace PigeonHunt
         private float roundEndLmaoAnimTimer;
         private bool lastResolutionHadAnimation;
         private bool lastResolutionWasHit;
+        private PigeonTarget lastHitPigeon;
         private int currentDifficultyLevel;
         private bool gameLocked;
         private bool carryScorePending;
@@ -82,19 +95,7 @@ namespace PigeonHunt
 
         public Vector3 GetRoundEndPigeonPosition()
         {
-            if (manager == null || manager.pigeonPool == null)
-            {
-                return Vector3.zero;
-            }
-            
-            var pigeon = manager.pigeonPool[0];
-
-            if (pigeon != null)
-            {
-                return pigeon.transform.position;
-            }
-
-            return Vector3.zero;
+            return GetResolvedPigeonPosition(lastHitPigeon);
         }
 
         public float DifficultyMultiplier
@@ -361,6 +362,12 @@ namespace PigeonHunt
                 return;
             }
 
+            if (IsPairModeActive() && pairWaveSecondSpawnPending)
+            {
+                TickPendingPairSecondSpawn();
+                return;
+            }
+
             if (pigeonsSpawnedThisRound >= targetQuotaThisRound)
             {
                 return;
@@ -507,6 +514,12 @@ namespace PigeonHunt
             pairWavePendingResolutions = 0;
             pairWaveHadHit = false;
             pairWaveHadMiss = false;
+            pairWaveHitCount = 0;
+            pairWaveSecondSpawnPending = false;
+            pairWaveSecondSpawnTimer = 0f;
+            pairWaveFirstSpawnIndex = -1;
+            pairWaveFirstHitColor = PigeonColorType.Black;
+            pairWaveSecondHitColor = PigeonColorType.Black;
             ResetWaveTracking();
             if (manager.uiController != null)
             {
@@ -579,6 +592,7 @@ namespace PigeonHunt
                 var scoreAmount = pigeon != null ? pigeon.GetScoreForCurrentRound() : manager.uiController.scorePerHit;
                 manager.uiController.AddScore(scoreAmount);
             }
+            lastHitPigeon = pigeon;
             pigeonsHitThisRound++;
             UpdateHitDisplay();
         }
@@ -672,11 +686,11 @@ namespace PigeonHunt
 
             if (IsPairModeActive() && pairWaveActive)
             {
-                HandlePairPigeonResolution(wasHit);
+                HandlePairPigeonResolution(pigeon, wasHit);
             }
             else
             {
-                HandleSinglePigeonResolution(wasHit);
+                HandleSinglePigeonResolution(pigeon, wasHit);
             }
         }
 
@@ -707,7 +721,7 @@ namespace PigeonHunt
             manager.PlayPigeonExitAnimation(null);
         }
 
-        private void HandleSinglePigeonResolution(bool wasHit)
+        private void HandleSinglePigeonResolution(PigeonTarget pigeon, bool wasHit)
         {
             pigeonsResolvedThisRound++;
 
@@ -721,7 +735,7 @@ namespace PigeonHunt
             TryResetWaveAfterResolution();
 
             spawnTimer = Mathf.Max(0f, manager.spawnDelay);
-            PlayResolutionAnimation(wasHit);
+            PlayResolutionAnimation(pigeon, wasHit);
 
             if (pigeonsResolvedThisRound >= targetQuotaThisRound)
             {
@@ -730,7 +744,7 @@ namespace PigeonHunt
             }
         }
 
-        private void HandlePairPigeonResolution(bool wasHit)
+        private void HandlePairPigeonResolution(PigeonTarget pigeon, bool wasHit)
         {
             if (!wasHit)
             {
@@ -739,14 +753,20 @@ namespace PigeonHunt
             else
             {
                 pairWaveHadHit = true;
+                RecordPairWaveHitColor(pigeon);
+                pairWaveLastHitPosition = GetResolvedPigeonPosition(pigeon);
+                pairWaveHasLastHitPosition = true;
+                pairWaveHitCount++;
             }
 
+            ClearResolvedPairWavePigeon(pigeon);
             pigeonsResolvedThisRound++;
             UpdateResolvedPigeonUI(wasHit);
 
             pairWavePendingResolutions = Mathf.Max(0, pairWavePendingResolutions - 1);
             if (pairWavePendingResolutions > 0)
             {
+                RefreshPairWaveMask();
                 return;
             }
 
@@ -761,7 +781,7 @@ namespace PigeonHunt
 
             spawnTimer = Mathf.Max(0f, manager.spawnDelay);
 
-            PlayResolutionAnimation(!pairWaveHadMiss);
+            PlayPairResolutionAnimation();
 
             if (pigeonsResolvedThisRound >= targetQuotaThisRound)
             {
@@ -769,8 +789,17 @@ namespace PigeonHunt
                 return;
             }
 
+            pairWaveHitCount = 0;
             pairWaveHadHit = false;
             pairWaveHadMiss = false;
+            pairWaveFirstHitColor = PigeonColorType.Black;
+            pairWaveSecondHitColor = PigeonColorType.Black;
+            pairWaveFirstPigeon = null;
+            pairWaveSecondPigeon = null;
+            pairWaveFirstUiIndex = -1;
+            pairWaveSecondUiIndex = -1;
+            pairWaveLastHitPosition = Vector3.zero;
+            pairWaveHasLastHitPosition = false;
         }
 
         private void UpdateResolvedPigeonUI(bool wasHit)
@@ -787,7 +816,7 @@ namespace PigeonHunt
             }
         }
 
-        private void PlayResolutionAnimation(bool wasHit)
+        private void PlayResolutionAnimation(PigeonTarget pigeon, bool wasHit)
         {
             lastResolutionHadAnimation = false;
             lastResolutionWasHit = wasHit;
@@ -800,7 +829,13 @@ namespace PigeonHunt
             lastResolutionHadAnimation = true;
             if (wasHit)
             {
-                var pos = GetRoundEndPigeonPosition();
+                var hitPigeon = pigeon != null ? pigeon : lastHitPigeon;
+                var pos = GetResolvedPigeonPosition(hitPigeon);
+
+                if (hitPigeon != null)
+                {
+                    manager.animationController.ShowGotOne(hitPigeon.ColorType);
+                }
 
                 manager.animationController.PlayHitAnimation(pos.x);
             }
@@ -810,9 +845,68 @@ namespace PigeonHunt
             }
         }
 
+        private Vector3 GetResolvedPigeonPosition(PigeonTarget pigeon)
+        {
+            if (pigeon != null)
+            {
+                return pigeon.transform.position;
+            }
+
+            return Vector3.zero;
+        }
+
+        private void PlayPairResolutionAnimation()
+        {
+            if (pairWaveHitCount >= 2)
+            {
+                PlayPairDoubleHitAnimation();
+                return;
+            }
+
+            if (pairWaveHitCount == 1)
+            {
+                PlayPairSingleHitAnimation();
+                return;
+            }
+
+            PlayResolutionAnimation(null, false);
+        }
+
+        private void PlayPairDoubleHitAnimation()
+        {
+            lastResolutionHadAnimation = false;
+            lastResolutionWasHit = true;
+
+            if (manager == null || manager.animationController == null || spawnTimer <= 0f)
+            {
+                return;
+            }
+
+            lastResolutionHadAnimation = true;
+            var pos = pairWaveHasLastHitPosition ? pairWaveLastHitPosition : GetRoundEndPigeonPosition();
+            manager.animationController.ShowGotTwo(pairWaveFirstHitColor, pairWaveSecondHitColor);
+            manager.animationController.PlayHitAnimation(pos.x);
+        }
+
+        private void PlayPairSingleHitAnimation()
+        {
+            lastResolutionHadAnimation = false;
+            lastResolutionWasHit = true;
+
+            if (manager == null || manager.animationController == null || spawnTimer <= 0f)
+            {
+                return;
+            }
+
+            lastResolutionHadAnimation = true;
+            var pos = pairWaveHasLastHitPosition ? pairWaveLastHitPosition : GetRoundEndPigeonPosition();
+            manager.animationController.ShowGotOne(pairWaveFirstHitColor);
+            manager.animationController.PlayHitAnimation(pos.x);
+        }
+
         private void TryStartPairSpawn()
         {
-            if (!TrySpawnSinglePigeon(out int firstIndex, false, false))
+            if (!TrySpawnSinglePigeon(out int firstIndex, out PigeonTarget firstPigeon, false, false))
             {
                 return;
             }
@@ -827,20 +921,59 @@ namespace PigeonHunt
                 return;
             }
 
-            if (!TrySpawnSinglePigeon(out int secondIndex, true, false))
+            pairWaveFirstSpawnIndex = firstIndex;
+            pairWaveActive = true;
+            pairWavePendingResolutions = 2;
+            pairWaveHadHit = false;
+            pairWaveHadMiss = false;
+            pairWaveHitCount = 0;
+            pairWaveFirstHitColor = PigeonColorType.Black;
+            pairWaveSecondHitColor = PigeonColorType.Black;
+            pairWaveFirstPigeon = firstPigeon;
+            pairWaveSecondPigeon = null;
+            pairWaveFirstUiIndex = firstIndex;
+            pairWaveSecondUiIndex = -1;
+            pairWaveLastHitPosition = Vector3.zero;
+            pairWaveHasLastHitPosition = false;
+            pairWaveSecondSpawnPending = true;
+            pairWaveSecondSpawnTimer = GetPairModeLaunchDelay();
+
+            if (manager.uiController != null)
+            {
+                manager.uiController.ShowActivePigeonMask(firstIndex);
+            }
+        }
+
+        private void TickPendingPairSecondSpawn()
+        {
+            pairWaveSecondSpawnTimer -= Time.deltaTime;
+            if (pairWaveSecondSpawnTimer > 0f)
+            {
+                return;
+            }
+
+            pairWaveSecondSpawnPending = false;
+            pairWaveSecondSpawnTimer = 0f;
+
+            if (!TrySpawnSinglePigeon(out int secondIndex, out PigeonTarget secondPigeon, true, false))
             {
                 if (manager.uiController != null)
                 {
-                    manager.uiController.ShowActivePigeonMask(firstIndex);
+                    manager.uiController.ShowActivePigeonMask(pairWaveFirstSpawnIndex);
                 }
 
-                pairWaveActive = false;
-                pairWavePendingResolutions = 0;
+                pairWaveSecondSpawnPending = false;
+                pairWaveSecondSpawnTimer = 0f;
+                pairWavePendingResolutions = Mathf.Max(0, pairWavePendingResolutions - 1);
+                pairWaveFirstSpawnIndex = -1;
 
                 return;
             }
 
-            BeginPairWave(firstIndex, secondIndex);
+            pairWaveSecondPigeon = secondPigeon;
+            pairWaveSecondUiIndex = secondIndex;
+            BeginPairWave(pairWaveFirstSpawnIndex, secondIndex);
+            pairWaveFirstSpawnIndex = -1;
         }
 
         private void BeginPairWave(int firstIndex, int secondIndex)
@@ -848,9 +981,6 @@ namespace PigeonHunt
             Debug.Log("BeginPairWave");
 
             pairWaveActive = true;
-            pairWavePendingResolutions = 2;
-            pairWaveHadHit = false;
-            pairWaveHadMiss = false;
 
             if (manager.uiController != null)
             {
@@ -872,7 +1002,14 @@ namespace PigeonHunt
 
         private bool TrySpawnSinglePigeon(out int spawnIndex, bool ignoreActiveSlots = false, bool updateUiMask = true)
         {
+            PigeonTarget spawnedPigeon;
+            return TrySpawnSinglePigeon(out spawnIndex, out spawnedPigeon, ignoreActiveSlots, updateUiMask);
+        }
+
+        private bool TrySpawnSinglePigeon(out int spawnIndex, out PigeonTarget spawnedPigeon, bool ignoreActiveSlots = false, bool updateUiMask = true)
+        {
             spawnIndex = -1;
+            spawnedPigeon = null;
 
             if (manager.pigeonPool == null || manager.pigeonPool.Length == 0)
             {
@@ -909,6 +1046,7 @@ namespace PigeonHunt
 
             pigeon.SetPlayArea(manager.playArea);
             spawnIndex = pigeonsSpawnedThisRound;
+            spawnedPigeon = pigeon;
             pigeon.BeginFlight(startPosition, directionIndex, 0f, DifficultyMultiplier);
             pigeonsSpawnedThisRound++;
             BeginWaveIfNeeded();
@@ -1110,13 +1248,37 @@ namespace PigeonHunt
                 return null;
             }
 
+            var availableCount = 0;
             for (int i = 0; i < manager.pigeonPool.Length; i++)
             {
                 var candidate = manager.pigeonPool[i];
                 if (candidate != null && candidate.IsAvailable)
                 {
+                    availableCount++;
+                }
+            }
+
+            if (availableCount <= 0)
+            {
+                return null;
+            }
+
+            var selectedAvailableIndex = Random.Range(0, availableCount);
+            var currentAvailableIndex = 0;
+            for (int i = 0; i < manager.pigeonPool.Length; i++)
+            {
+                var candidate = manager.pigeonPool[i];
+                if (candidate == null || !candidate.IsAvailable)
+                {
+                    continue;
+                }
+
+                if (currentAvailableIndex == selectedAvailableIndex)
+                {
                     return candidate;
                 }
+
+                currentAvailableIndex++;
             }
 
             return null;
@@ -1186,6 +1348,7 @@ namespace PigeonHunt
             roundEndLmaoAnimTimer = 0f;
             lastResolutionHadAnimation = false;
             lastResolutionWasHit = false;
+            lastHitPigeon = null;
             ResetRoundRuntimeState();
 
             DespawnAllPigeons();
@@ -1194,7 +1357,7 @@ namespace PigeonHunt
 
         private void ResetRoundRuntimeState()
         {
-            targetQuotaThisRound = Mathf.Max(1, manager.pigeonsPerRound);
+            targetQuotaThisRound = GetTargetQuotaForCurrentMode();
             pigeonsSpawnedThisRound = 0;
             pigeonsResolvedThisRound = 0;
             pigeonsHitThisRound = 0;
@@ -1203,6 +1366,18 @@ namespace PigeonHunt
             pairWavePendingResolutions = 0;
             pairWaveHadHit = false;
             pairWaveHadMiss = false;
+            pairWaveHitCount = 0;
+            pairWaveSecondSpawnPending = false;
+            pairWaveSecondSpawnTimer = 0f;
+            pairWaveFirstSpawnIndex = -1;
+            pairWaveFirstHitColor = PigeonColorType.Black;
+            pairWaveSecondHitColor = PigeonColorType.Black;
+            pairWaveFirstPigeon = null;
+            pairWaveSecondPigeon = null;
+            pairWaveFirstUiIndex = -1;
+            pairWaveSecondUiIndex = -1;
+            pairWaveLastHitPosition = Vector3.zero;
+            pairWaveHasLastHitPosition = false;
             roundEndPending = false;
             roundEndHitCountTriggered = false;
             roundEndAudioTriggered = false;
@@ -1214,7 +1389,103 @@ namespace PigeonHunt
             roundEndLmaoAnimTimer = 0f;
             lastResolutionHadAnimation = false;
             lastResolutionWasHit = false;
+            lastHitPigeon = null;
             ResetWaveTracking();
+        }
+
+        private float GetPairModeLaunchDelay()
+        {
+            if (manager == null)
+            {
+                return 0f;
+            }
+
+            var delayMin = Mathf.Min(manager.pairModeLaunchDelayMin, manager.pairModeLaunchDelayMax);
+            var delayMax = Mathf.Max(manager.pairModeLaunchDelayMin, manager.pairModeLaunchDelayMax);
+            return Random.Range(delayMin, delayMax);
+        }
+
+        private void RecordPairWaveHitColor(PigeonTarget hitPigeon)
+        {
+            if (hitPigeon == null)
+            {
+                return;
+            }
+
+            if (pairWaveHitCount <= 0)
+            {
+                pairWaveFirstHitColor = hitPigeon.ColorType;
+                return;
+            }
+
+            pairWaveSecondHitColor = hitPigeon.ColorType;
+        }
+
+        private void ClearResolvedPairWavePigeon(PigeonTarget pigeon)
+        {
+            if (pigeon == null)
+            {
+                return;
+            }
+
+            if (pairWaveFirstPigeon == pigeon)
+            {
+                pairWaveFirstPigeon = null;
+                pairWaveFirstUiIndex = -1;
+                return;
+            }
+
+            if (pairWaveSecondPigeon == pigeon)
+            {
+                pairWaveSecondPigeon = null;
+                pairWaveSecondUiIndex = -1;
+            }
+        }
+
+        private void RefreshPairWaveMask()
+        {
+            if (manager == null || manager.uiController == null)
+            {
+                return;
+            }
+
+            var firstActive = pairWaveFirstPigeon != null ? pairWaveFirstUiIndex : -1;
+            var secondActive = pairWaveSecondPigeon != null ? pairWaveSecondUiIndex : -1;
+
+            if (firstActive >= 0 && secondActive >= 0)
+            {
+                manager.uiController.SetActivePigeonMaskTargets(firstActive, secondActive);
+                return;
+            }
+
+            if (firstActive >= 0)
+            {
+                manager.uiController.SetActivePigeonMaskTargets(firstActive, -1);
+                return;
+            }
+
+            if (secondActive >= 0)
+            {
+                manager.uiController.SetActivePigeonMaskTargets(secondActive, -1);
+                return;
+            }
+
+            manager.uiController.ClearActivePigeonMask();
+        }
+
+        private int GetTargetQuotaForCurrentMode()
+        {
+            if (manager == null)
+            {
+                return 1;
+            }
+
+            if (activeGameMode == GameModePair || manager.gameMode == GameModePair)
+            {
+                return Mathf.Max(1, manager.pairModeWaveCount) * 2;
+            }
+
+            return Mathf.Max(1, manager.pigeonsPerRound);
         }
 
         private void DespawnAllPigeons()
@@ -1298,10 +1569,16 @@ namespace PigeonHunt
             manager.uiController.ResetBulletClipUsage();
             manager.uiController.SetDifficultyLevel(GetDisplayedDifficultyLevel());
             manager.uiController.SetRoundLevel(GetDisplayedRoundNumber());
+            manager.uiController.SetPigeonQuota(targetQuotaThisRound);
             manager.uiController.ClearPigeonHitIndicators();
             manager.uiController.SetGoodActive(false);
             manager.uiController.ClearPerfectDisplay();
             manager.uiController.ShowRoundDisplay();
+
+            if (manager.animationController != null)
+            {
+                manager.animationController.HideGotOneObjects();
+            }
         }
 
         private void UpdateHitDisplay()

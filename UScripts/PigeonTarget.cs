@@ -5,6 +5,13 @@ using VRC.SDKBase;
 
 namespace PigeonHunt
 {
+    public enum PigeonColorType
+    {
+        Black = 0,
+        Blue = 1,
+        Red = 2
+    }
+
     [AddComponentMenu("PigeonHunt/Pigeon Target")]
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class PigeonTarget : UdonSharpBehaviour
@@ -49,6 +56,9 @@ namespace PigeonHunt
         [SerializeField] private int normalHitScore = 500;
         [SerializeField] private int goodHitScore = 800;
         [SerializeField] private int excellentHitScore = 1000;
+
+        [Header("Pigeon Color")]
+        [SerializeField] private PigeonColorType pigeonColorType = PigeonColorType.Black;
 
         [Header("Collision")]
         [SerializeField] private BoxCollider hitCollider;
@@ -108,6 +118,7 @@ namespace PigeonHunt
 
         public bool IsAvailable => !isActive && !isDespawning;
         public bool OccupiesSlot => isActive || isDespawning;
+        public PigeonColorType ColorType => pigeonColorType;
 
         private void Awake()
         {
@@ -1188,23 +1199,41 @@ namespace PigeonHunt
 
         private void CacheColliderExtents()
         {
-            var computed = fallbackExtents;
+            var computed = Vector2.zero;
 
             hitCollider = QychuiUtilities.EnsureBoxCollider(this, hitCollider);
 
             if (hitCollider != null)
             {
-                var bounds = hitCollider.bounds;
+                var localSize = hitCollider.size;
+                var lossyScale = hitCollider.transform.lossyScale;
+                computed.x = Mathf.Abs(localSize.x * lossyScale.x) * 0.5f;
+                computed.y = Mathf.Abs(localSize.y * lossyScale.y) * 0.5f;
 
-                if (bounds.extents.x > 0f)
+                if (hitCollider.gameObject.activeInHierarchy)
                 {
-                    computed.x = Mathf.Max(computed.x, bounds.extents.x);
-                }
+                    var bounds = hitCollider.bounds;
 
-                if (bounds.extents.y > 0f)
-                {
-                    computed.y = Mathf.Max(computed.y, bounds.extents.y);
+                    if (bounds.extents.x > 0f)
+                    {
+                        computed.x = Mathf.Max(computed.x, bounds.extents.x);
+                    }
+
+                    if (bounds.extents.y > 0f)
+                    {
+                        computed.y = Mathf.Max(computed.y, bounds.extents.y);
+                    }
                 }
+            }
+
+            if (computed.x <= 0f)
+            {
+                computed.x = Mathf.Max(0.0001f, fallbackExtents.x);
+            }
+
+            if (computed.y <= 0f)
+            {
+                computed.y = Mathf.Max(0.0001f, fallbackExtents.y);
             }
 
             colliderExtents = computed;

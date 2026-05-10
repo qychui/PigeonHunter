@@ -12,6 +12,17 @@ namespace PigeonHunt
         public int pigeonsPerRound = 10;
         public float spawnDelay = 4f;
 
+        [Header("Pair Mode")]
+        [Min(1)]
+        [Tooltip("Mode2 每轮生成的双鸽 wave 数量。每个 wave 固定生成 2 只鸽子。")]
+        public int pairModeWaveCount = 5;
+        [Min(0f)]
+        [Tooltip("Mode2 双鸽 wave 中第二只鸽子的最小延迟发射时间。")]
+        public float pairModeLaunchDelayMin = 0.15f;
+        [Min(0f)]
+        [Tooltip("Mode2 双鸽 wave 中第二只鸽子的最大延迟发射时间。")]
+        public float pairModeLaunchDelayMax = 0.45f;
+
         [Header("Game Mode")]
         [Tooltip("1 = Single mode, 2 = Pair mode, 3 = Training mode")]
         [Range(1, 3)]
@@ -336,6 +347,30 @@ namespace PigeonHunt
             }
         }
 
+        private void StartModeB()
+        {
+            gameMode = 2;
+            CancelPendingModeStart();
+            ResetShootingRangeSessionState();
+            DespawnAllClayTargets();
+
+            if (uiController != null)
+            {
+                uiController.SetGameOverActive(false);
+                uiController.ClearClayTargetHitIndicators();
+                uiController.ClearPerfectDisplay();
+                uiController.SetGoodActive(false);
+                uiController.ClearActivePigeonMask();
+                ShowModeABScene();
+            }
+
+            if (actionController != null)
+            {
+                actionController.Initialize(this);
+                actionController.BeginRound();
+            }
+        }
+
         private void StartModeC()
         {
             gameMode = 3;
@@ -408,7 +443,7 @@ namespace PigeonHunt
                     StartModeA();
                     break;
                 case 1:
-                    Debug.Log("[GameManager] Mode B is not implemented yet.");
+                    StartModeB();
                     break;
                 case 2:
                     StartModeC();
@@ -1076,13 +1111,13 @@ namespace PigeonHunt
 
             if (firstActiveIndex >= 0 && secondActiveIndex >= 0)
             {
-                uiController.ShowActivePigeonMaskPair(firstActiveIndex, secondActiveIndex);
+                uiController.SetActivePigeonMaskTargets(firstActiveIndex, secondActiveIndex);
                 return;
             }
 
             if (firstActiveIndex >= 0)
             {
-                uiController.ShowActivePigeonMask(firstActiveIndex);
+                uiController.SetActivePigeonMaskTargets(firstActiveIndex, -1);
             }
         }
 

@@ -478,6 +478,11 @@ namespace PigeonHunt
             SetActiveMaskTargets(firstIndex, secondIndex);
         }
 
+        public void SetActivePigeonMaskTargets(int firstIndex, int secondIndex)
+        {
+            SetActiveMaskTargets(firstIndex, secondIndex);
+        }
+
         private void SetActiveMaskTargets(int firstIndex, int secondIndex)
         {
             if (pigeonMaskObjects == null || pigeonMaskObjects.Length == 0)

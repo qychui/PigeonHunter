@@ -48,6 +48,7 @@ public class SoundManager : UdonSharpBehaviour
     private float sequenceTimer;
     private AudioSource sequenceSource;
     private bool sequenceFullHit;
+    private AudioSource activeFlightSource;
 
     public void PlayGunShot(AudioSource source)
     {
@@ -76,6 +77,13 @@ public class SoundManager : UdonSharpBehaviour
             return;
         }
 
+        if (activeFlightSource != null && activeFlightSource != source && activeFlightSource.isPlaying)
+        {
+            PigeonHunt.QychuiUtilities.SafeStop(source);
+            return;
+        }
+
+        activeFlightSource = source;
         if (!source.isPlaying)
         {
             source.Play();
@@ -84,6 +92,11 @@ public class SoundManager : UdonSharpBehaviour
 
     public void StopFlight(AudioSource source)
     {
+        if (activeFlightSource == source)
+        {
+            activeFlightSource = null;
+        }
+
         PigeonHunt.QychuiUtilities.SafeStop(source);
     }
 
@@ -130,6 +143,12 @@ public class SoundManager : UdonSharpBehaviour
     public void StopAll()
     {
         StopSequence();
+        if (activeFlightSource != null)
+        {
+            PigeonHunt.QychuiUtilities.SafeStop(activeFlightSource);
+            activeFlightSource = null;
+        }
+
         PigeonHunt.QychuiUtilities.SafeStop(endAudio);
         PigeonHunt.QychuiUtilities.SafeStop(endLmaoAudio);
         PigeonHunt.QychuiUtilities.SafeStop(scoreCountAudio);

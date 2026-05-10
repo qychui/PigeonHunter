@@ -35,6 +35,19 @@ namespace PigeonHunt
         [SerializeField] private GameObject roundEnd;
         [SerializeField] private GameObject roundNext;
 
+        [Header("GotOne Objects")]
+        [SerializeField] private GameObject gotOneBlack;
+        [SerializeField] private GameObject gotOneBlue;
+        [SerializeField] private GameObject gotOneRed;
+
+        [Header("GotTwo Objects")]
+        [SerializeField] private GameObject gotTwoBlack_Black;
+        [SerializeField] private GameObject gotTwoBlack_Blue;
+        [SerializeField] private GameObject gotTwoBlack_Red;
+        [SerializeField] private GameObject gotTwoBlue_Blue;
+        [SerializeField] private GameObject gotTwoBlue_Red;
+        [SerializeField] private GameObject gotTwoRed_Red;
+
         [Header("Audio")]
         [SerializeField] private SoundManager soundManager;
 
@@ -43,6 +56,7 @@ namespace PigeonHunt
         public int idleState = 0;
         public int gameStartState = 1;
         public int hitState = 2;
+        public int hitTwoState = 5;
         public int missState = 3;
         public int roundNextState = 4;
 
@@ -225,6 +239,8 @@ namespace PigeonHunt
         private bool lmaoResetPausePending;
         private bool movementResetOnComplete;
         private Canvas dogMainCanvas;
+        private GameObject activeGotOneObject;
+        private GameObject activeGotTwoObject;
 
         public float GameStartDuration => Mathf.Max(Mathf.Max(0f, gameStartDuration), GetRoundStartMovementSequenceDuration());
         public float GameStartDelay => Mathf.Max(0f, gameStartDelay);
@@ -310,6 +326,49 @@ namespace PigeonHunt
             got.transform.localPosition = new Vector3(clampedLocalX, currentLocal.y, currentLocal.z);
 
             RequestMovement(DogMovementType.Hit);
+        }
+
+        public void ShowGotOne(PigeonColorType colorType)
+        {
+            HideGotTwoObjects();
+            HideGotOneObjects();
+
+            activeGotOneObject = GetGotOneObject(colorType);
+            if (activeGotOneObject != null && !activeGotOneObject.activeSelf)
+            {
+                activeGotOneObject.SetActive(true);
+            }
+        }
+
+        public void ShowGotTwo(PigeonColorType firstColorType, PigeonColorType secondColorType)
+        {
+            HideGotOneObjects();
+            HideGotTwoObjects();
+
+            activeGotTwoObject = GetGotTwoObject(firstColorType, secondColorType);
+            if (activeGotTwoObject != null && !activeGotTwoObject.activeSelf)
+            {
+                activeGotTwoObject.SetActive(true);
+            }
+        }
+
+        public void HideGotOneObjects()
+        {
+            SetOptionalObjectActive(gotOneBlack, false);
+            SetOptionalObjectActive(gotOneBlue, false);
+            SetOptionalObjectActive(gotOneRed, false);
+            activeGotOneObject = null;
+        }
+
+        public void HideGotTwoObjects()
+        {
+            SetOptionalObjectActive(gotTwoBlack_Black, false);
+            SetOptionalObjectActive(gotTwoBlack_Blue, false);
+            SetOptionalObjectActive(gotTwoBlack_Red, false);
+            SetOptionalObjectActive(gotTwoBlue_Blue, false);
+            SetOptionalObjectActive(gotTwoBlue_Red, false);
+            SetOptionalObjectActive(gotTwoRed_Red, false);
+            activeGotTwoObject = null;
         }
 
         private float ResolveHitLocalX(float worldX)
@@ -412,6 +471,8 @@ namespace PigeonHunt
             stateResetTimer = 0f;
             stateResetSourceState = int.MinValue;
             StopMovement(true);
+            HideGotOneObjects();
+            HideGotTwoObjects();
             ApplyState(idleState);
         }
 
@@ -894,6 +955,7 @@ namespace PigeonHunt
 
         private void StopMovement(bool resetPositionToBase)
         {
+            var completedType = activeMovementType;
             if (movementTarget != null && resetPositionToBase)
             {
                 movementTarget.position = movementBasePosition;
@@ -908,6 +970,50 @@ namespace PigeonHunt
             movementCurrentVerticalSpeed = 0f;
             movementResetOnComplete = false;
             lmaoResetPausePending = false;
+
+            if (completedType == DogMovementType.Hit)
+            {
+                HideGotOneObjects();
+                HideGotTwoObjects();
+            }
+        }
+
+        private GameObject GetGotTwoObject(PigeonColorType firstColorType, PigeonColorType secondColorType)
+        {
+            var lower = firstColorType;
+            var upper = secondColorType;
+            if ((int)lower > (int)upper)
+            {
+                lower = secondColorType;
+                upper = firstColorType;
+            }
+
+            if (lower == PigeonColorType.Black)
+            {
+                if (upper == PigeonColorType.Black)
+                {
+                    return gotTwoBlack_Black;
+                }
+
+                if (upper == PigeonColorType.Blue)
+                {
+                    return gotTwoBlack_Blue;
+                }
+
+                return gotTwoBlack_Red;
+            }
+
+            if (lower == PigeonColorType.Blue)
+            {
+                if (upper == PigeonColorType.Blue)
+                {
+                    return gotTwoBlue_Blue;
+                }
+
+                return gotTwoBlue_Red;
+            }
+
+            return gotTwoRed_Red;
         }
 
 
@@ -1430,6 +1536,27 @@ namespace PigeonHunt
         private float GetResetDelay(DogMovementType type)
         {
             return type == DogMovementType.Miss ? Mathf.Max(0f, missResetDelay) : Mathf.Max(0f, hitResetDelay);
+        }
+
+        private GameObject GetGotOneObject(PigeonColorType colorType)
+        {
+            switch (colorType)
+            {
+                case PigeonColorType.Blue:
+                    return gotOneBlue;
+                case PigeonColorType.Red:
+                    return gotOneRed;
+                default:
+                    return gotOneBlack;
+            }
+        }
+
+        private void SetOptionalObjectActive(GameObject target, bool active)
+        {
+            if (target != null && target.activeSelf != active)
+            {
+                target.SetActive(active);
+            }
         }
 
         private void PlayMovementSound(DogMovementType type)
