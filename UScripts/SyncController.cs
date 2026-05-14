@@ -34,6 +34,36 @@ public class SyncController : UdonSharpBehaviour
     public UdonSharpBehaviour mode1RoundPlanReceiver;
     public string mode1RoundPlanEventName;
 
+    [Header("Mode1 Hit Event")]
+    [Tooltip("Optional receiver called whenever a synced mode1 hit event is received.")]
+    public UdonSharpBehaviour mode1HitReceiver;
+    public string mode1HitEventName;
+
+    [Header("Mode1 Shot Event")]
+    [Tooltip("Optional receiver called whenever a synced mode1 non-hit shot event is received.")]
+    public UdonSharpBehaviour mode1ShotReceiver;
+    public string mode1ShotEventName;
+
+    [Header("Mode1 Round Result")]
+    [Tooltip("Optional receiver called whenever a synced mode1 round result is received.")]
+    public UdonSharpBehaviour mode1RoundResultReceiver;
+    public string mode1RoundResultEventName;
+
+    [Header("Mode3 Wave Start")]
+    [Tooltip("Optional receiver called whenever a synced mode3 wave starts.")]
+    public UdonSharpBehaviour mode3WaveStartReceiver;
+    public string mode3WaveStartEventName;
+
+    [Header("Mode3 Hit Event")]
+    [Tooltip("Optional receiver called whenever a synced mode3 clay hit event is received.")]
+    public UdonSharpBehaviour mode3HitReceiver;
+    public string mode3HitEventName;
+
+    [Header("Mode3 Shot Event")]
+    [Tooltip("Optional receiver called whenever a synced mode3 non-hit shot event is received.")]
+    public UdonSharpBehaviour mode3ShotReceiver;
+    public string mode3ShotEventName;
+
     [Header("Flow Events")]
     [Tooltip("Receivers for simple indexed flow events.")]
     public UdonSharpBehaviour[] flowEventReceivers;
@@ -47,28 +77,69 @@ public class SyncController : UdonSharpBehaviour
     [UdonSynced] private int mode1RoundNumber;
     [UdonSynced] private int mode1RoundSeed;
     [UdonSynced] private int mode1RoundPlanRequestId;
+    [UdonSynced] private int mode1HitPigeonPoolIndex = -1;
+    [UdonSynced] private int mode1HitUsedShots;
+    [UdonSynced] private int mode1HitRequestId;
+    [UdonSynced] private int mode1ShotUsedShots;
+    [UdonSynced] private int mode1ShotRequestId;
+    [UdonSynced] private int mode1ResultRoundNumber;
+    [UdonSynced] private int mode1ResultScore;
+    [UdonSynced] private int mode1ResultHitCount;
+    [UdonSynced] private bool mode1ResultPassed;
+    [UdonSynced] private int mode1RoundResultRequestId;
+    [UdonSynced] private int mode1StartGateRoundNumber;
+    [UdonSynced] private int mode1StartGateSeed;
     private int handledStartRequestId;
     private int handledMode1RoundPlanRequestId;
+    private int handledMode1HitRequestId;
+    private int handledMode1ShotRequestId;
+    private int handledMode1RoundResultRequestId;
+    private int mode3WaveRoundNumber;
+    private int mode3WaveIndex;
+    private int mode3WaveSeed;
+    private int mode3WaveRequestId;
+    private int mode3HitClayPoolIndex = -1;
+    private int mode3HitUsedShots;
+    private int mode3HitRequestId;
+    private int mode3ShotUsedShots;
+    private int mode3ShotRequestId;
+    private int handledMode3WaveRequestId;
+    private int handledMode3HitRequestId;
+    private int handledMode3ShotRequestId;
 
-    void Start()
+    public void TransferOwnershipToLocalPlayer()
     {
-        //if (Networking.IsOwner(gameObject))
-        //{
-        //    InitializeObjectMaskFromScene();
-        //    ApplySyncedObjectStates();
-        //}
+        EnsureLocalOwner();
     }
 
-    public override void OnPlayerTriggerStay(VRCPlayerApi player)
+    public bool IsLocalOwner()
     {
-        //TODO:
-
-        base.OnPlayerTriggerStay(player);
+        return Networking.LocalPlayer != null && Networking.IsOwner(gameObject);
     }
 
-    public override void OnPlayerJoined(VRCPlayerApi player)
+    public override void OnOwnershipTransferred(VRCPlayerApi player)
     {
-        base.OnPlayerJoined(player);
+        if (player == null || !player.isLocal)
+        {
+            return;
+        }
+
+        ApplySyncedVisualState();
+        RequestSerialization();
+    }
+
+    private void EnsureLocalOwner()
+    {
+        if (Networking.LocalPlayer != null && !Networking.IsOwner(gameObject))
+        {
+            Networking.SetOwner(Networking.LocalPlayer, gameObject);
+        }
+    }
+
+    private void ApplySyncedVisualState()
+    {
+        ApplySyncedObjectStates();
+        ApplySyncedIndexObjects();
     }
 
     [NetworkCallable]
@@ -116,10 +187,7 @@ public class SyncController : UdonSharpBehaviour
             return;
         }
 
-        if (!Networking.IsOwner(gameObject))
-        {
-            Networking.SetOwner(Networking.LocalPlayer, gameObject);
-        }
+        EnsureLocalOwner();
 
         var bit = 1 << objectIndex;
         if (active)
@@ -157,10 +225,7 @@ public class SyncController : UdonSharpBehaviour
             return;
         }
 
-        if (!Networking.IsOwner(gameObject))
-        {
-            Networking.SetOwner(Networking.LocalPlayer, gameObject);
-        }
+        EnsureLocalOwner();
 
         syncedIndex = index;
         ApplySyncedIndexObjects();
@@ -180,10 +245,7 @@ public class SyncController : UdonSharpBehaviour
             return;
         }
 
-        if (!Networking.IsOwner(gameObject))
-        {
-            Networking.SetOwner(Networking.LocalPlayer, gameObject);
-        }
+        EnsureLocalOwner();
 
         syncedIndex = index;
         syncedStartIndex = index;
@@ -204,12 +266,19 @@ public class SyncController : UdonSharpBehaviour
         return mode1RoundSeed;
     }
 
+    public int GetMode1StartGateRoundNumber()
+    {
+        return mode1StartGateRoundNumber;
+    }
+
+    public int GetMode1StartGateSeed()
+    {
+        return mode1StartGateSeed;
+    }
+
     public void SyncMode1RoundPlan(int roundNumber, int seed)
     {
-        if (!Networking.IsOwner(gameObject))
-        {
-            Networking.SetOwner(Networking.LocalPlayer, gameObject);
-        }
+        EnsureLocalOwner();
 
         mode1RoundNumber = Mathf.Max(1, roundNumber);
         mode1RoundSeed = seed;
@@ -218,13 +287,205 @@ public class SyncController : UdonSharpBehaviour
         RequestSerialization();
     }
 
+    public void SyncMode1StartGate(int roundNumber, int seed)
+    {
+        EnsureLocalOwner();
+
+        mode1StartGateRoundNumber = Mathf.Max(1, roundNumber);
+        mode1StartGateSeed = seed;
+        RequestSerialization();
+    }
+
+    public int GetMode1HitPigeonPoolIndex()
+    {
+        return mode1HitPigeonPoolIndex;
+    }
+
+    public int GetMode1HitUsedShots()
+    {
+        return mode1HitUsedShots;
+    }
+
+    public void SyncMode1PigeonHit(int pigeonPoolIndex, int usedShots)
+    {
+        if (pigeonPoolIndex < 0)
+        {
+            return;
+        }
+
+        EnsureLocalOwner();
+
+        mode1HitPigeonPoolIndex = pigeonPoolIndex;
+        mode1HitUsedShots = Mathf.Max(0, usedShots);
+        mode1HitRequestId++;
+        RequestSerialization();
+    }
+
+    public int GetMode1ShotUsedShots()
+    {
+        return mode1ShotUsedShots;
+    }
+
+    public void SyncMode1ShotMiss(int usedShots)
+    {
+        EnsureLocalOwner();
+
+        mode1ShotUsedShots = Mathf.Max(0, usedShots);
+        mode1ShotRequestId++;
+        RequestSerialization();
+    }
+
+    public int GetMode1ResultRoundNumber()
+    {
+        return mode1ResultRoundNumber;
+    }
+
+    public int GetMode1ResultScore()
+    {
+        return mode1ResultScore;
+    }
+
+    public int GetMode1ResultHitCount()
+    {
+        return mode1ResultHitCount;
+    }
+
+    public bool GetMode1ResultPassed()
+    {
+        return mode1ResultPassed;
+    }
+
+    public void SyncMode1RoundResult(int roundNumber, int score, int hitCount, bool passed)
+    {
+        EnsureLocalOwner();
+
+        mode1ResultRoundNumber = Mathf.Max(1, roundNumber);
+        mode1ResultScore = Mathf.Max(0, score);
+        mode1ResultHitCount = Mathf.Max(0, hitCount);
+        mode1ResultPassed = passed;
+        mode1RoundResultRequestId++;
+        RequestSerialization();
+    }
+
+    public int GetMode3WaveRoundNumber()
+    {
+        return mode3WaveRoundNumber;
+    }
+
+    public int GetMode3WaveIndex()
+    {
+        return mode3WaveIndex;
+    }
+
+    public int GetMode3WaveSeed()
+    {
+        return mode3WaveSeed;
+    }
+
+    public void SyncMode3WaveStart(int roundNumber, int waveIndex, int seed)
+    {
+        EnsureLocalOwner();
+
+        mode3WaveRoundNumber = Mathf.Max(1, roundNumber);
+        mode3WaveIndex = Mathf.Max(0, waveIndex);
+        mode3WaveSeed = seed;
+        mode3WaveRequestId++;
+        SendCustomNetworkEvent(NetworkEventTarget.Others, nameof(NetworkApplyMode3WaveStart), mode3WaveRoundNumber, mode3WaveIndex, mode3WaveSeed, mode3WaveRequestId);
+    }
+
+    [NetworkCallable]
+    public void NetworkApplyMode3WaveStart(int roundNumber, int waveIndex, int seed, int requestId)
+    {
+        if (requestId == handledMode3WaveRequestId)
+        {
+            return;
+        }
+
+        mode3WaveRoundNumber = Mathf.Max(1, roundNumber);
+        mode3WaveIndex = Mathf.Max(0, waveIndex);
+        mode3WaveSeed = seed;
+        mode3WaveRequestId = requestId;
+        handledMode3WaveRequestId = requestId;
+        SendReceiverEvent(mode3WaveStartReceiver, mode3WaveStartEventName);
+    }
+
+    public int GetMode3HitClayPoolIndex()
+    {
+        return mode3HitClayPoolIndex;
+    }
+
+    public int GetMode3HitUsedShots()
+    {
+        return mode3HitUsedShots;
+    }
+
+    public void SyncMode3ClayHit(int clayPoolIndex, int usedShots)
+    {
+        if (clayPoolIndex < 0)
+        {
+            return;
+        }
+
+        EnsureLocalOwner();
+
+        mode3HitClayPoolIndex = clayPoolIndex;
+        mode3HitUsedShots = Mathf.Max(0, usedShots);
+        mode3HitRequestId++;
+        SendCustomNetworkEvent(NetworkEventTarget.Others, nameof(NetworkApplyMode3ClayHit), mode3HitClayPoolIndex, mode3HitUsedShots, mode3HitRequestId);
+    }
+
+    [NetworkCallable]
+    public void NetworkApplyMode3ClayHit(int clayPoolIndex, int usedShots, int requestId)
+    {
+        if (requestId == handledMode3HitRequestId)
+        {
+            return;
+        }
+
+        mode3HitClayPoolIndex = clayPoolIndex;
+        mode3HitUsedShots = Mathf.Max(0, usedShots);
+        mode3HitRequestId = requestId;
+        handledMode3HitRequestId = requestId;
+        SendReceiverEvent(mode3HitReceiver, mode3HitEventName);
+    }
+
+    public int GetMode3ShotUsedShots()
+    {
+        return mode3ShotUsedShots;
+    }
+
+    public void SyncMode3ShotMiss(int usedShots)
+    {
+        EnsureLocalOwner();
+
+        mode3ShotUsedShots = Mathf.Max(0, usedShots);
+        mode3ShotRequestId++;
+        SendCustomNetworkEvent(NetworkEventTarget.Others, nameof(NetworkApplyMode3ShotMiss), mode3ShotUsedShots, mode3ShotRequestId);
+    }
+
+    [NetworkCallable]
+    public void NetworkApplyMode3ShotMiss(int usedShots, int requestId)
+    {
+        if (requestId == handledMode3ShotRequestId)
+        {
+            return;
+        }
+
+        mode3ShotUsedShots = Mathf.Max(0, usedShots);
+        mode3ShotRequestId = requestId;
+        handledMode3ShotRequestId = requestId;
+        SendReceiverEvent(mode3ShotReceiver, mode3ShotEventName);
+    }
+
     public override void OnDeserialization()
     {
-        ApplySyncedObjectStates();
-        ApplySyncedIndexObjects();
+        ApplySyncedVisualState();
         NotifySyncedIndexChanged();
         ApplyMode1RoundPlan();
         ApplySyncedStartRequest();
+        ApplyMode1ShotEvent();
+        ApplyMode1HitEvent();
+        ApplyMode1RoundResult();
     }
 
     public void SyncFlowEvent(int eventIndex)
@@ -353,12 +614,15 @@ public class SyncController : UdonSharpBehaviour
 
     private void NotifySyncedIndexChanged()
     {
-        if (syncedIndexChangedReceiver == null || string.IsNullOrEmpty(syncedIndexChangedEventName))
-        {
-            return;
-        }
+        SendReceiverEvent(syncedIndexChangedReceiver, syncedIndexChangedEventName);
+    }
 
-        syncedIndexChangedReceiver.SendCustomEvent(syncedIndexChangedEventName);
+    private void SendReceiverEvent(UdonSharpBehaviour receiver, string eventName)
+    {
+        if (receiver != null && !string.IsNullOrEmpty(eventName))
+        {
+            receiver.SendCustomEvent(eventName);
+        }
     }
 
     private void ApplySyncedStartRequest()
@@ -369,12 +633,7 @@ public class SyncController : UdonSharpBehaviour
         }
 
         handledStartRequestId = syncedStartRequestId;
-        if (syncedStartReceiver == null || string.IsNullOrEmpty(syncedStartEventName))
-        {
-            return;
-        }
-
-        syncedStartReceiver.SendCustomEvent(syncedStartEventName);
+        SendReceiverEvent(syncedStartReceiver, syncedStartEventName);
     }
 
     private void ApplyMode1RoundPlan()
@@ -385,11 +644,40 @@ public class SyncController : UdonSharpBehaviour
         }
 
         handledMode1RoundPlanRequestId = mode1RoundPlanRequestId;
-        if (mode1RoundPlanReceiver == null || string.IsNullOrEmpty(mode1RoundPlanEventName))
+        SendReceiverEvent(mode1RoundPlanReceiver, mode1RoundPlanEventName);
+    }
+
+    private void ApplyMode1HitEvent()
+    {
+        if (mode1HitRequestId == handledMode1HitRequestId || mode1HitPigeonPoolIndex < 0)
         {
             return;
         }
 
-        mode1RoundPlanReceiver.SendCustomEvent(mode1RoundPlanEventName);
+        handledMode1HitRequestId = mode1HitRequestId;
+        SendReceiverEvent(mode1HitReceiver, mode1HitEventName);
     }
+
+    private void ApplyMode1ShotEvent()
+    {
+        if (mode1ShotRequestId == handledMode1ShotRequestId)
+        {
+            return;
+        }
+
+        handledMode1ShotRequestId = mode1ShotRequestId;
+        SendReceiverEvent(mode1ShotReceiver, mode1ShotEventName);
+    }
+
+    private void ApplyMode1RoundResult()
+    {
+        if (mode1RoundResultRequestId == handledMode1RoundResultRequestId || mode1ResultRoundNumber <= 0)
+        {
+            return;
+        }
+
+        handledMode1RoundResultRequestId = mode1RoundResultRequestId;
+        SendReceiverEvent(mode1RoundResultReceiver, mode1RoundResultEventName);
+    }
+
 }

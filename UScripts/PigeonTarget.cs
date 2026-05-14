@@ -123,6 +123,7 @@ namespace PigeonHunt
 
         public bool IsAvailable => !isActive && !isDespawning;
         public bool OccupiesSlot => isActive || isDespawning;
+        public bool CanApplySyncedHit => isActive && !isDespawning && !hasBeenHit;
         public PigeonColorType ColorType => pigeonColorType;
 
         private void Awake()
@@ -390,6 +391,16 @@ namespace PigeonHunt
 
         public void ApplyHit(Vector3 hitPoint, Vector3 hitNormal, VRCPlayerApi shooter)
         {
+            ApplyHitInternal(hitPoint, hitNormal, true);
+        }
+
+        private void ApplyHitInternal(Vector3 hitPoint, Vector3 hitNormal, bool registerHit)
+        {
+            ApplyHitInternal(hitPoint, hitNormal, registerHit, true);
+        }
+
+        private void ApplyHitInternal(Vector3 hitPoint, Vector3 hitNormal, bool registerHit, bool snapToHitPoint)
+        {
             if (!isActive || hasBeenHit)
             {
                 return;
@@ -405,9 +416,12 @@ namespace PigeonHunt
             fallAnimationPending = false;
             fallAnimationTimer = 0f;
 
-            var hitPosition = new Vector3(hitPoint.x, hitPoint.y, planeZ);
-            position = ClampInsideBounds(hitPosition);
-            transform.position = position;
+            if (snapToHitPoint)
+            {
+                var hitPosition = new Vector3(hitPoint.x, hitPoint.y, planeZ);
+                position = ClampInsideBounds(hitPosition);
+                transform.position = position;
+            }
 
             direction = Vector3.zero;
 
@@ -434,9 +448,9 @@ namespace PigeonHunt
 
             QychuiUtilities.SetColliderEnabled(hitCollider, false);
 
-            PlayHitParticle(hitPoint, hitNormal);
+            PlayHitParticle(snapToHitPoint ? hitPoint : transform.position, hitNormal);
 
-            if (gameManager != null)
+            if (registerHit && gameManager != null)
             {
                 gameManager.RegisterPigeonHit(this);
             }
@@ -445,6 +459,11 @@ namespace PigeonHunt
         public void OnShot(Vector3 hitPoint, Vector3 hitNormal)
         {
             ApplyHit(hitPoint, hitNormal, Networking.LocalPlayer);
+        }
+
+        public void ApplySyncedHit()
+        {
+            ApplyHitInternal(transform.position, -transform.forward, false, false);
         }
 
         private void PlayHitParticle(Vector3 hitPoint, Vector3 hitNormal)

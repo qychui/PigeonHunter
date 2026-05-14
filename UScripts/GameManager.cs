@@ -1,6 +1,7 @@
 ﻿using UdonSharp;
 using UnityEngine;
 using UnityEngine.Serialization;
+using VRC.SDKBase;
 
 namespace PigeonHunt
 {
@@ -17,10 +18,10 @@ namespace PigeonHunt
         public int pairModeWaveCount = 5;
         [Min(0f)]
         [Tooltip("Mode2 双鸽 wave 中第二只鸽子的最小延迟发射时间。")]
-        public float pairModeLaunchDelayMin = 0.15f;
+        public float pairModeLaunchDelayMin = 0.05f;
         [Min(0f)]
         [Tooltip("Mode2 双鸽 wave 中第二只鸽子的最大延迟发射时间。")]
-        public float pairModeLaunchDelayMax = 0.45f;
+        public float pairModeLaunchDelayMax = 1.45f;
 
         [Header("Game Mode")]
         [Tooltip("1 = Single mode, 2 = Pair mode, 3 = Training mode")]
@@ -29,20 +30,20 @@ namespace PigeonHunt
 
         [Header("Main Menu")]
         [Min(0f)]
-        public float modeConfirmDelay = 1f;
+        public float modeConfirmDelay = 0.5f;
 
         [Header("Difficulty")]
         public float roundDifficultyStep = 0.25f;
-        public float maxDifficultyMultiplier = 3f;
+        public float maxDifficultyMultiplier = 4f;
         [Min(0f)]
         [Tooltip("Mode1/Mode2 每过一关对每只目标的 escapeTriggerTime 统一减少的秒数。")]
-        public float pigeonEscapeTriggerReductionStep = 0.1f;
+        public float pigeonEscapeTriggerReductionStep = 0.2f;
         [Min(1)]
         [Tooltip("escapeTriggerTime 递减最多生效到第几关，超过后不再继续减少。")]
         public int pigeonEscapeTriggerReductionMaxRound = 15;
         [Min(0f)]
         [Tooltip("每只目标最终运行时 escapeTriggerTime 的最小值。")]
-        public float pigeonEscapeTriggerMinimum = 0.5f;
+        public float pigeonEscapeTriggerMinimum = 4f;
         
         [Header("Pigeon Boundary Reflection")]
         [Range(0f, 1f)]
@@ -50,15 +51,15 @@ namespace PigeonHunt
         public float pigeonBoundaryRandomDeflectionChanceBase = 0f;
         [Min(0f)]
         [Tooltip("每过一关，鸽子撞边后触发随机偏转概率增加的数值。")]
-        public float pigeonBoundaryRandomDeflectionChanceStepPerRound = 0f;
+        public float pigeonBoundaryRandomDeflectionChanceStepPerRound = 0.03f;
         [Range(0f, 1f)]
         [Tooltip("鸽子撞边后触发随机偏转概率的最大值。")]
-        public float pigeonBoundaryRandomDeflectionChanceMax = 0f;
+        public float pigeonBoundaryRandomDeflectionChanceMax = 0.45f;
 
         [Header("Shot Reaction")]
         [Tooltip("Chance per shot for each flying, unhit pigeon to change direction.")]
         [Range(0f, 1f)]
-        public float shotDirectionChangeChance = 0.4f;
+        public float shotDirectionChangeChance = 0.7f;
 
         [Header("Play Area")]
         public RectTransform playArea;
@@ -69,17 +70,17 @@ namespace PigeonHunt
 
         [Header("Shooting Range Spawn")]
         [Tooltip("World-space inset applied to the left and right side of the shooting range bottom edge.")]
-        public float shootingRangeBottomSpawnSegment = 0.25f;
+        public float shootingRangeBottomSpawnSegment = 0.2f;
         [Tooltip("Minimum launch angle in degrees from world right/up mirrored by side.")]
         public float shootingRangeMinLaunchAngle = 58f;
         [Tooltip("Maximum launch angle in degrees from world right/up mirrored by side.")]
         public float shootingRangeMaxLaunchAngle = 74f;
         [Tooltip("Normalized speed in relation to the shooting range move area width.")]
-        public float shootingRangeTravelSpeedPerSecond = 0.48f;
+        public float shootingRangeTravelSpeedPerSecond = 0.3f;
         [Tooltip("Peak height relative to the shooting range area height.")]
-        public Vector2 shootingRangePeakHeightRange = new Vector2(0.45f, 0.72f);
+        public Vector2 shootingRangePeakHeightRange = new Vector2(0.76f, 0.88f);
         [Tooltip("Height relative to the shooting range area height where all clay visuals should hide.")]
-        public Vector2 shootingRangeEndHeightRange = new Vector2(0.1f, 0.25f);
+        public Vector2 shootingRangeEndHeightRange = new Vector2(0.38f, 0.38f);
         [Tooltip("Maximum clay lifetime at round 1.")]
         public float shootingRangeClayLifetimeMax = 6f;
         [Tooltip("Minimum clay lifetime after difficulty ramps up.")]
@@ -93,9 +94,9 @@ namespace PigeonHunt
         [Min(1)]
         public int shootingRangeWaveCount = 5;
         [Min(0f)]
-        public float shootingRangePairLaunchDelayMin = 0.15f;
+        public float shootingRangePairLaunchDelayMin = 0.05f;
         [Min(0f)]
-        public float shootingRangePairLaunchDelayMax = 0.45f;
+        public float shootingRangePairLaunchDelayMax = 2.45f;
         [Min(0f)]
         public float shootingRangeWaveDelay = 0.75f;
 
@@ -143,6 +144,20 @@ namespace PigeonHunt
         private bool shootingRangeRoundRestartPending;
         private bool shootingRangeGameOver;
         private int shootingRangeRoundWaveCursor;
+        private int pendingSyncedPigeonHitPoolIndex = -1;
+        private int pendingSyncedPigeonHitUsedShots;
+        private int pendingSyncedPigeonHitRound;
+        private float pendingSyncedPigeonHitTimer;
+        private bool mode3OwnerWaveStartInProgress;
+        private bool mode3SyncedWaveStartInProgress;
+        private int mode3WaveSeed;
+        private bool mode3WaveSeedActive;
+        private int pendingSyncedClayHitPoolIndex = -1;
+        private int pendingSyncedClayHitUsedShots;
+        private int pendingSyncedClayHitRound;
+        private float pendingSyncedClayHitTimer;
+        private const float PendingSyncedPigeonHitTimeout = 3f;
+        private const float PendingSyncedClayHitTimeout = 3f;
         private const int ShootingRangeMaxDifficultyLevel = 4;
         private readonly Vector3[] shootingRangeCorners = new Vector3[4];
 
@@ -150,28 +165,44 @@ namespace PigeonHunt
         public float DifficultyMultiplier => actionController != null ? actionController.DifficultyMultiplier : DefaultDifficulty;
         public float CurrentPigeonBoundaryRandomDeflectionChance => GetPigeonBoundaryRandomDeflectionChanceForRound(actionController != null ? actionController.CurrentRoundNumber : 1);
 
+        public void TransferGameplayOwnershipToLocalPlayer(GameObject pickedUpObject)
+        {
+            if (Networking.LocalPlayer == null)
+            {
+                return;
+            }
+
+            TransferOwnerIfNeeded(pickedUpObject);
+
+            if (syncController != null)
+            {
+                syncController.TransferOwnershipToLocalPlayer();
+            }
+
+            if (uiController != null)
+            {
+                TransferOwnerIfNeeded(uiController.gameObject);
+            }
+        }
+
+        private void TransferOwnerIfNeeded(GameObject target)
+        {
+            if (target == null || Networking.IsOwner(target))
+            {
+                return;
+            }
+
+            Networking.SetOwner(Networking.LocalPlayer, target);
+        }
+
+        public bool IsLocalGameplayOwner()
+        {
+            return syncController == null || syncController.IsLocalOwner();
+        }
+
         private void Start()
         {
-            if (syncController != null && uiController != null)
-            {
-                if (syncController.syncedIndexChangedReceiver == null)
-                {
-                    syncController.syncedIndexChangedReceiver = this;
-                    syncController.syncedIndexChangedEventName = nameof(ApplySyncedModeSelection);
-                }
-
-                if (syncController.syncedStartReceiver == null)
-                {
-                    syncController.syncedStartReceiver = this;
-                    syncController.syncedStartEventName = nameof(ApplySyncedModeStart);
-                }
-
-                if (syncController.mode1RoundPlanReceiver == null)
-                {
-                    syncController.mode1RoundPlanReceiver = this;
-                    syncController.mode1RoundPlanEventName = nameof(ApplySyncedMode1RoundPlan);
-                }
-            }
+            BindSyncControllerReceivers();
 
             if (actionController != null)
             {
@@ -185,6 +216,68 @@ namespace PigeonHunt
             if (uiController != null)
             {
                 ShowTitleScreenScene();
+            }
+        }
+
+        private void BindSyncControllerReceivers()
+        {
+            if (syncController == null || uiController == null)
+            {
+                return;
+            }
+
+            if (syncController.syncedIndexChangedReceiver == null)
+            {
+                syncController.syncedIndexChangedReceiver = this;
+                syncController.syncedIndexChangedEventName = nameof(ApplySyncedModeSelection);
+            }
+
+            if (syncController.syncedStartReceiver == null)
+            {
+                syncController.syncedStartReceiver = this;
+                syncController.syncedStartEventName = nameof(ApplySyncedModeStart);
+            }
+
+            if (syncController.mode1RoundPlanReceiver == null)
+            {
+                syncController.mode1RoundPlanReceiver = this;
+                syncController.mode1RoundPlanEventName = nameof(ApplySyncedMode1RoundPlan);
+            }
+
+            if (syncController.mode1HitReceiver == null)
+            {
+                syncController.mode1HitReceiver = this;
+                syncController.mode1HitEventName = nameof(ApplySyncedMode1PigeonHit);
+            }
+
+            if (syncController.mode1ShotReceiver == null)
+            {
+                syncController.mode1ShotReceiver = this;
+                syncController.mode1ShotEventName = nameof(ApplySyncedMode1ShotMiss);
+            }
+
+            if (syncController.mode1RoundResultReceiver == null)
+            {
+                syncController.mode1RoundResultReceiver = this;
+                syncController.mode1RoundResultEventName = nameof(ApplySyncedMode1RoundResult);
+            }
+
+            if (syncController.mode3WaveStartReceiver == null)
+            {
+                syncController.mode3WaveStartReceiver = this;
+                syncController.mode3WaveStartEventName = nameof(ApplySyncedMode3WaveStart);
+            }
+
+            if (syncController.mode3HitReceiver == null)
+            {
+                syncController.mode3HitReceiver = this;
+                syncController.mode3HitEventName = nameof(ApplySyncedMode3ClayHit);
+            }
+
+            if (syncController.mode3ShotReceiver == null)
+            {
+                syncController.mode3ShotReceiver = this;
+                syncController.mode3ShotEventName = nameof(ApplySyncedMode3ShotMiss);
             }
         }
 
@@ -218,6 +311,9 @@ namespace PigeonHunt
             {
                 actionController.Tick();
             }
+
+            TickPendingSyncedPigeonHit();
+            TickPendingSyncedClayHit();
         }
 
         public void BeginRound()
@@ -429,6 +525,19 @@ namespace PigeonHunt
             actionController.ApplyMode1RoundPlan(syncController.GetMode1RoundNumber(), syncController.GetMode1RoundSeed());
         }
 
+        public void ApplySyncedMode3WaveStart()
+        {
+            if (syncController == null)
+            {
+                return;
+            }
+
+            StartSyncedShootingRangeWave(
+                syncController.GetMode3WaveRoundNumber(),
+                syncController.GetMode3WaveIndex(),
+                syncController.GetMode3WaveSeed());
+        }
+
         private bool TryRestartOnGameOver()
         {
             var normalModeGameOver = actionController != null && actionController.IsGameOver;
@@ -591,10 +700,143 @@ namespace PigeonHunt
 
         public void RegisterPigeonHit(PigeonTarget pigeon)
         {
+            SyncMode1PigeonHit(pigeon);
+
             if (actionController != null)
             {
                 actionController.RegisterPigeonHit(pigeon);
             }
+        }
+
+        public void ApplySyncedMode1PigeonHit()
+        {
+            if (syncController == null || pigeonPool == null)
+            {
+                return;
+            }
+
+            var poolIndex = syncController.GetMode1HitPigeonPoolIndex();
+            var usedShots = syncController.GetMode1HitUsedShots();
+            if (!TryApplySyncedPigeonHit(poolIndex, usedShots))
+            {
+                QueueSyncedPigeonHit(poolIndex, usedShots);
+            }
+        }
+
+        private bool TryApplySyncedPigeonHit(int poolIndex, int usedShots)
+        {
+            if (pigeonPool == null)
+            {
+                return false;
+            }
+
+            if (poolIndex < 0 || poolIndex >= pigeonPool.Length)
+            {
+                return true;
+            }
+
+            var pigeon = pigeonPool[poolIndex];
+            if (pigeon == null)
+            {
+                return true;
+            }
+
+            if (!pigeon.CanApplySyncedHit)
+            {
+                return false;
+            }
+
+            if (actionController != null)
+            {
+                actionController.ApplySyncedShotUsage(usedShots);
+                actionController.RegisterSyncedPigeonHit(pigeon, false);
+            }
+
+            pigeon.ApplySyncedHit();
+            return true;
+        }
+
+        private void QueueSyncedPigeonHit(int poolIndex, int usedShots)
+        {
+            if (poolIndex < 0)
+            {
+                return;
+            }
+
+            pendingSyncedPigeonHitPoolIndex = poolIndex;
+            pendingSyncedPigeonHitUsedShots = Mathf.Max(0, usedShots);
+            pendingSyncedPigeonHitRound = actionController != null ? actionController.CurrentRoundNumber : 0;
+            pendingSyncedPigeonHitTimer = PendingSyncedPigeonHitTimeout;
+        }
+
+        private void TickPendingSyncedPigeonHit()
+        {
+            if (pendingSyncedPigeonHitPoolIndex < 0)
+            {
+                return;
+            }
+
+            if (pendingSyncedPigeonHitTimer > 0f)
+            {
+                pendingSyncedPigeonHitTimer -= Time.deltaTime;
+            }
+
+            if (actionController != null &&
+                pendingSyncedPigeonHitRound > 0 &&
+                actionController.CurrentRoundNumber != pendingSyncedPigeonHitRound)
+            {
+                ClearPendingSyncedPigeonHit();
+                return;
+            }
+
+            if (TryApplySyncedPigeonHit(pendingSyncedPigeonHitPoolIndex, pendingSyncedPigeonHitUsedShots) ||
+                pendingSyncedPigeonHitTimer <= 0f)
+            {
+                ClearPendingSyncedPigeonHit();
+            }
+        }
+
+        private void ClearPendingSyncedPigeonHit()
+        {
+            pendingSyncedPigeonHitPoolIndex = -1;
+            pendingSyncedPigeonHitUsedShots = 0;
+            pendingSyncedPigeonHitRound = 0;
+            pendingSyncedPigeonHitTimer = 0f;
+        }
+
+        private void SyncMode1PigeonHit(PigeonTarget pigeon)
+        {
+            if (!CanSendPigeonModeSync() || pigeonPool == null || pigeon == null)
+            {
+                return;
+            }
+
+            var poolIndex = GetPigeonPoolIndex(pigeon);
+            if (poolIndex < 0)
+            {
+                return;
+            }
+
+            var usedShots = actionController != null ? actionController.GetShotsUsedThisWave() : 0;
+            syncController.SyncMode1PigeonHit(poolIndex, usedShots);
+        }
+
+        private int GetPigeonPoolIndex(PigeonTarget pigeon)
+        {
+            if (pigeonPool == null || pigeon == null)
+            {
+                return -1;
+            }
+
+            for (int i = 0; i < pigeonPool.Length; i++)
+            {
+                if (pigeonPool[i] == pigeon)
+                {
+                    return i;
+                }
+            }
+
+            return -1;
         }
 
         public bool TryRegisterShot()
@@ -611,13 +853,221 @@ namespace PigeonHunt
         {
             if (shootingRangeSessionActive)
             {
+                if (!hitPigeon)
+                {
+                    SyncMode3ShotMiss();
+                }
+
                 return;
+            }
+
+            if (!hitPigeon)
+            {
+                SyncMode1ShotMiss();
             }
 
             if (actionController != null)
             {
                 actionController.NotifyShotOutcome(hitPigeon);
             }
+        }
+
+        public void ApplySyncedMode1ShotMiss()
+        {
+            if (syncController == null || actionController == null)
+            {
+                return;
+            }
+
+            actionController.ApplySyncedShotUsage(syncController.GetMode1ShotUsedShots());
+            actionController.NotifyShotOutcome(false);
+        }
+
+        public void SyncMode1RoundResult(int roundNumber, int score, int hitCount, bool passed)
+        {
+            if (!CanSendPigeonModeSync())
+            {
+                return;
+            }
+
+            syncController.SyncMode1RoundResult(roundNumber, score, hitCount, passed);
+        }
+
+        public void ApplySyncedMode1RoundResult()
+        {
+            if (syncController == null || actionController == null)
+            {
+                return;
+            }
+
+            actionController.ApplySyncedMode1RoundResult(
+                syncController.GetMode1ResultRoundNumber(),
+                syncController.GetMode1ResultScore(),
+                syncController.GetMode1ResultHitCount(),
+                syncController.GetMode1ResultPassed());
+        }
+
+        private void SyncMode1ShotMiss()
+        {
+            if (!CanSendPigeonModeSync() || actionController == null)
+            {
+                return;
+            }
+
+            syncController.SyncMode1ShotMiss(actionController.GetShotsUsedThisWave());
+        }
+
+        private bool CanSendPigeonModeSync()
+        {
+            return IsNetworkedPigeonMode() &&
+                   syncController != null &&
+                   IsLocalGameplayOwner();
+        }
+
+        private void SyncMode3ClayHit(int clayIndex)
+        {
+            if (!CanSendMode3Sync())
+            {
+                return;
+            }
+
+            syncController.SyncMode3ClayHit(clayIndex, shootingRangeWaveShotsUsed);
+        }
+
+        private void SyncMode3ShotMiss()
+        {
+            if (!CanSendMode3Sync())
+            {
+                return;
+            }
+
+            syncController.SyncMode3ShotMiss(shootingRangeWaveShotsUsed);
+        }
+
+        private bool CanSendMode3Sync()
+        {
+            return IsShootingRangeModeWithSync() && IsLocalGameplayOwner();
+        }
+
+        private bool TryApplySyncedClayHit(int poolIndex, int usedShots)
+        {
+            if (!shootingRangeSessionActive || clayPigeonPool == null)
+            {
+                return false;
+            }
+
+            if (poolIndex < 0 || poolIndex >= clayPigeonPool.Length)
+            {
+                return true;
+            }
+
+            var clayTarget = clayPigeonPool[poolIndex];
+            if (clayTarget == null)
+            {
+                return true;
+            }
+
+            if (!clayTarget.CanApplySyncedHit)
+            {
+                return false;
+            }
+
+            var uiIndex = GetClayTargetUiIndex(poolIndex);
+            if (uiIndex < 0)
+            {
+                return false;
+            }
+
+            ApplySyncedShootingRangeShotUsage(usedShots);
+            EnsureClayHitStateBuffer();
+            if (shootingRangeClayHitStates != null && poolIndex < shootingRangeClayHitStates.Length)
+            {
+                if (shootingRangeClayHitStates[poolIndex])
+                {
+                    return true;
+                }
+
+                shootingRangeClayHitStates[poolIndex] = true;
+            }
+
+            shootingRangeHitsThisRound++;
+            if (uiController != null)
+            {
+                uiController.AddScore(clayTarget.GetScoreForCurrentRound());
+                uiController.SetClayTargetHitState(uiIndex, true);
+            }
+
+            RefreshActiveClayMasks();
+            clayTarget.ApplySyncedHit();
+            return true;
+        }
+
+        private void QueueSyncedClayHit(int poolIndex, int usedShots)
+        {
+            if (poolIndex < 0)
+            {
+                return;
+            }
+
+            pendingSyncedClayHitPoolIndex = poolIndex;
+            pendingSyncedClayHitUsedShots = Mathf.Max(0, usedShots);
+            pendingSyncedClayHitRound = Mathf.Max(1, shootingRangeRoundsCompleted + 1);
+            pendingSyncedClayHitTimer = PendingSyncedClayHitTimeout;
+        }
+
+        private void TickPendingSyncedClayHit()
+        {
+            if (pendingSyncedClayHitPoolIndex < 0)
+            {
+                return;
+            }
+
+            if (pendingSyncedClayHitTimer > 0f)
+            {
+                pendingSyncedClayHitTimer -= Time.deltaTime;
+            }
+
+            if (pendingSyncedClayHitRound > 0 &&
+                pendingSyncedClayHitRound != Mathf.Max(1, shootingRangeRoundsCompleted + 1))
+            {
+                ClearPendingSyncedClayHit();
+                return;
+            }
+
+            if (TryApplySyncedClayHit(pendingSyncedClayHitPoolIndex, pendingSyncedClayHitUsedShots) ||
+                pendingSyncedClayHitTimer <= 0f)
+            {
+                ClearPendingSyncedClayHit();
+            }
+        }
+
+        private void ClearPendingSyncedClayHit()
+        {
+            pendingSyncedClayHitPoolIndex = -1;
+            pendingSyncedClayHitUsedShots = 0;
+            pendingSyncedClayHitRound = 0;
+            pendingSyncedClayHitTimer = 0f;
+        }
+
+        private void ApplySyncedShootingRangeShotUsage(int usedShots)
+        {
+            shootingRangeWaveShotsUsed = Mathf.Clamp(usedShots, 0, GetShootingRangeWaveShotLimit());
+            UpdateShootingRangeWaveBulletUi();
+        }
+
+        private bool IsNetworkedPigeonMode()
+        {
+            return gameMode == 1 || gameMode == 2;
+        }
+
+        private bool IsShootingRangeMode()
+        {
+            return gameMode == 3;
+        }
+
+        private bool IsShootingRangeModeWithSync()
+        {
+            return IsShootingRangeMode() && syncController != null;
         }
 
         public void RegisterClayHit(ClayTarget clayTarget)
@@ -644,9 +1094,15 @@ namespace PigeonHunt
                 return;
             }
 
+            SyncMode3ClayHit(clayIndex);
             EnsureClayHitStateBuffer();
             if (shootingRangeClayHitStates != null && clayIndex < shootingRangeClayHitStates.Length)
             {
+                if (shootingRangeClayHitStates[clayIndex])
+                {
+                    return;
+                }
+
                 shootingRangeClayHitStates[clayIndex] = true;
             }
 
@@ -654,6 +1110,31 @@ namespace PigeonHunt
             uiController.AddScore(clayTarget.GetScoreForCurrentRound());
             uiController.SetClayTargetHitState(uiIndex, true);
             RefreshActiveClayMasks();
+        }
+
+        public void ApplySyncedMode3ClayHit()
+        {
+            if (syncController == null)
+            {
+                return;
+            }
+
+            var poolIndex = syncController.GetMode3HitClayPoolIndex();
+            var usedShots = syncController.GetMode3HitUsedShots();
+            if (!TryApplySyncedClayHit(poolIndex, usedShots))
+            {
+                QueueSyncedClayHit(poolIndex, usedShots);
+            }
+        }
+
+        public void ApplySyncedMode3ShotMiss()
+        {
+            if (syncController == null || !shootingRangeSessionActive)
+            {
+                return;
+            }
+
+            ApplySyncedShootingRangeShotUsage(syncController.GetMode3ShotUsedShots());
         }
 
         public void NotifyClayAvailable(ClayTarget clayTarget, bool wasHit)
@@ -930,6 +1411,11 @@ namespace PigeonHunt
             shootingRangeRoundEndUiTriggered = false;
             shootingRangeRoundEndAudioTriggered = false;
             shootingRangeRoundRestartPending = false;
+            mode3OwnerWaveStartInProgress = false;
+            mode3SyncedWaveStartInProgress = false;
+            mode3WaveSeed = 0;
+            mode3WaveSeedActive = false;
+            ClearPendingSyncedClayHit();
             ResetClayHitStateBuffer();
             ResetShootingRangeWaveBulletUi();
         }
@@ -937,6 +1423,11 @@ namespace PigeonHunt
         private void BeginNextShootingRangeWave()
         {
             if (!shootingRangeSessionActive)
+            {
+                return;
+            }
+
+            if (!mode3OwnerWaveStartInProgress && !mode3SyncedWaveStartInProgress && IsShootingRangeModeWithSync() && !IsLocalGameplayOwner())
             {
                 return;
             }
@@ -954,6 +1445,7 @@ namespace PigeonHunt
             shootingRangeRoundEndUiTriggered = false;
             shootingRangeRoundEndAudioTriggered = false;
             shootingRangeRoundRestartPending = false;
+            EnsureMode3WaveSeedForCurrentWave();
             BeginShootingRangeWaveShotWindow();
 
             if (!TryLaunchClayTargetFromPool(0))
@@ -967,12 +1459,64 @@ namespace PigeonHunt
             var delayMin = Mathf.Min(shootingRangePairLaunchDelayMin, shootingRangePairLaunchDelayMax);
             var delayMax = Mathf.Max(shootingRangePairLaunchDelayMin, shootingRangePairLaunchDelayMax);
             shootingRangeSecondClayPending = true;
-            shootingRangeSecondClayTimer = Random.Range(delayMin, delayMax);
+            shootingRangeSecondClayTimer = SampleMode3Range(delayMin, delayMax, 53);
+        }
+
+        private void StartSyncedShootingRangeWave(int roundNumber, int waveIndex, int seed)
+        {
+            if (!shootingRangeSessionActive || !IsShootingRangeMode())
+            {
+                return;
+            }
+
+            if (IsLocalGameplayOwner())
+            {
+                return;
+            }
+
+            var currentRound = Mathf.Max(1, shootingRangeRoundsCompleted + 1);
+            if (roundNumber < currentRound)
+            {
+                return;
+            }
+
+            if (roundNumber > currentRound)
+            {
+                shootingRangeRoundsCompleted = Mathf.Max(0, roundNumber - 1);
+            }
+
+            shootingRangeRoundWaveCursor = Mathf.Max(0, waveIndex);
+            mode3WaveSeed = seed;
+            mode3WaveSeedActive = true;
+            mode3SyncedWaveStartInProgress = true;
+            BeginNextShootingRangeWave();
+            mode3SyncedWaveStartInProgress = false;
+        }
+
+        private void EnsureMode3WaveSeedForCurrentWave()
+        {
+            if (mode3WaveSeedActive)
+            {
+                return;
+            }
+
+            mode3WaveSeed = Random.Range(1, int.MaxValue);
+            mode3WaveSeedActive = true;
+
+            if (!CanSendMode3Sync())
+            {
+                return;
+            }
+
+            mode3OwnerWaveStartInProgress = true;
+            syncController.SyncMode3WaveStart(Mathf.Max(1, shootingRangeRoundsCompleted + 1), shootingRangeRoundWaveCursor, mode3WaveSeed);
+            mode3OwnerWaveStartInProgress = false;
         }
 
         private void ScheduleNextShootingRangeWave()
         {
             EndShootingRangeWaveShotWindow();
+            mode3WaveSeedActive = false;
             shootingRangeSecondClayPending = false;
             shootingRangeSecondClayTimer = 0f;
             shootingRangeNextWavePending = true;
@@ -1341,6 +1885,7 @@ namespace PigeonHunt
             shootingRangeRoundEndUiTriggered = false;
             shootingRangeRoundEndAudioTriggered = false;
             shootingRangeRoundRestartPending = false;
+            mode3WaveSeedActive = false;
             var roundClayCount = Mathf.Max(1, shootingRangeWaveCount) * 2;
             shootingRangeRoundPerfect = shootingRangeHitsThisRound >= roundClayCount;
             shootingRangeRoundPassed = DetermineShootingRangeRoundPass(roundClayCount);
@@ -1576,13 +2121,13 @@ namespace PigeonHunt
 
             var width = Mathf.Max(0.0001f, maxX - minX);
             var height = Mathf.Max(0.0001f, maxY - minY);
-            var startX = SampleWithin(minX, maxX, shootingRangeBottomSpawnSegment);
+            var startX = SampleWithin(minX, maxX, shootingRangeBottomSpawnSegment, GetMode3Wave01(11 + shootingRangeLaunchedThisWave));
             var startY = minY;
             var centerX = (minX + maxX) * 0.5f;
             var moveRight = startX <= centerX;
             var angleMin = Mathf.Min(shootingRangeMinLaunchAngle, shootingRangeMaxLaunchAngle);
             var angleMax = Mathf.Max(shootingRangeMinLaunchAngle, shootingRangeMaxLaunchAngle);
-            var angle = Random.Range(angleMin, angleMax);
+            var angle = SampleRange(angleMin, angleMax, GetMode3Wave01(23 + shootingRangeLaunchedThisWave));
             var radians = angle * Mathf.Deg2Rad;
             var horizontalDirection = moveRight ? 1f : -1f;
             var horizontalSpeedRatio = Mathf.Max(0.01f, Mathf.Cos(radians));
@@ -1594,12 +2139,12 @@ namespace PigeonHunt
 
             var peakMinRatio = Mathf.Min(shootingRangePeakHeightRange.x, shootingRangePeakHeightRange.y);
             var peakMaxRatio = Mathf.Max(shootingRangePeakHeightRange.x, shootingRangePeakHeightRange.y);
-            peakHeight = height * Random.Range(peakMinRatio, peakMaxRatio);
+            peakHeight = height * SampleRange(peakMinRatio, peakMaxRatio, GetMode3Wave01(37 + shootingRangeLaunchedThisWave));
             peakHeight = Mathf.Max(0.01f, peakHeight);
 
             var endHeightMinRatio = Mathf.Min(shootingRangeEndHeightRange.x, shootingRangeEndHeightRange.y);
             var endHeightMaxRatio = Mathf.Max(shootingRangeEndHeightRange.x, shootingRangeEndHeightRange.y);
-            hideHeightY = minY + (height * Random.Range(endHeightMinRatio, endHeightMaxRatio));
+            hideHeightY = minY + (height * SampleRange(endHeightMinRatio, endHeightMaxRatio, GetMode3Wave01(41 + shootingRangeLaunchedThisWave)));
             hideHeightY = Mathf.Clamp(hideHeightY, minY, maxY);
 
             spawnPosition = new Vector3(startX, startY, planeZ);
@@ -1612,6 +2157,11 @@ namespace PigeonHunt
         }
 
         private float SampleWithin(float min, float max, float segmentInset)
+        {
+            return SampleWithin(min, max, segmentInset, Random.value);
+        }
+
+        private float SampleWithin(float min, float max, float segmentInset, float value01)
         {
             var clampedInset = Mathf.Max(0f, segmentInset);
             var paddedMin = min + clampedInset;
@@ -1629,7 +2179,43 @@ namespace PigeonHunt
                 return paddedMin;
             }
 
-            return Random.Range(paddedMin, paddedMax);
+            return SampleRange(paddedMin, paddedMax, value01);
+        }
+
+        private float SampleRange(float min, float max, float value01)
+        {
+            if (Mathf.Approximately(min, max))
+            {
+                return min;
+            }
+
+            return Mathf.Lerp(min, max, Mathf.Clamp01(value01));
+        }
+
+        private float SampleMode3Range(float min, float max, int salt)
+        {
+            return SampleRange(min, max, GetMode3Wave01(salt));
+        }
+
+        private float GetMode3Wave01(int salt)
+        {
+            if (!mode3WaveSeedActive)
+            {
+                return Random.value;
+            }
+
+            var value = Mathf.Abs(mode3WaveSeed);
+            value = MixMode3WaveValue(value, shootingRangeRoundsCompleted + 1);
+            value = MixMode3WaveValue(value, shootingRangeRoundWaveCursor);
+            value = MixMode3WaveValue(value, salt);
+            return (value & 0x7fffffff) / 2147483647f;
+        }
+
+        private int MixMode3WaveValue(int value, int salt)
+        {
+            var mixed = Mathf.Abs(value + 31 * (salt + 1));
+            mixed = (mixed * 1103515245 + 12345) & 0x7fffffff;
+            return mixed;
         }
 
         private void ShowTitleScreenScene()

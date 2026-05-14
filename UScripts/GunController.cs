@@ -103,6 +103,12 @@ namespace PigeonHunt
 
         public override void OnPickup()
         {
+            if (gameManager != null)
+            {
+                gameManager.TransferGameplayOwnershipToLocalPlayer(gameObject);
+                return;
+            }
+
             if (Networking.LocalPlayer != null && !Networking.IsOwner(gameObject))
             {
                 Networking.SetOwner(Networking.LocalPlayer, gameObject);
@@ -177,6 +183,11 @@ namespace PigeonHunt
 
         private bool TryFire()
         {
+            if (gameManager != null && !gameManager.IsLocalGameplayOwner())
+            {
+                gameManager.TransferGameplayOwnershipToLocalPlayer(gameObject);
+            }
+
             var currentTime = Time.time;
 
             if (currentTime < lastFireTime + fireCooldown)

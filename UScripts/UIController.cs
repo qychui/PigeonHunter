@@ -46,7 +46,7 @@ namespace PigeonHunt
         public GameObject[] clayTargetHitIndicators;
         [Min(0f)]
         [Tooltip("回合结算时命中数动画的延迟间隔。")]
-        public float pigeonHitCountAnimDelay = 0.3f;
+        public float pigeonHitCountAnimDelay = 0.15f;
         [Min(0f)]
         [Tooltip("全命中动画的闪烁间隔。")]
         public float fullHitBlinkDelay = 0.25f;
@@ -92,9 +92,9 @@ namespace PigeonHunt
         [Min(0f)]
         public float shootingRangeIntroDelayAfterRound = 0.5f;
         [Min(0f)]
-        public float shootingRangeGoBlinkInterval = 0.25f;
+        public float shootingRangeGoBlinkInterval = 0.2f;
         [Min(0f)]
-        public float shootingRangeIntroDelayAfterGo = 0.5f;
+        public float shootingRangeIntroDelayAfterGo = 1f;
         [Min(1)]
         public int shootingRangeGoBlinkCycles = 5;
 
@@ -102,7 +102,7 @@ namespace PigeonHunt
         public GameObject roundBackgroundObject;
         public Material[] roundLevelTopDigitMaterials;
         [Min(0f)]
-        public float roundDisplayTime = 2f;
+        public float roundDisplayTime = 2.5f;
 
         [UdonSynced] private int _modeATopScoreValue;
         [UdonSynced] private int _modeBTopScoreValue;
@@ -413,7 +413,12 @@ namespace PigeonHunt
             var currentTopScore = GetSelectedModeTopScore();
             if (scoreToCompare > currentTopScore)
             {
-                EnsureTopScoreOwner();
+                if (!Networking.IsOwner(gameObject))
+                {
+                    UpdateTopScoreDigits();
+                    return;
+                }
+
                 SetSelectedModeTopScore(scoreToCompare);
                 RequestSerialization();
             }
@@ -895,14 +900,6 @@ namespace PigeonHunt
                 default:
                     _modeATopScoreValue = value;
                     break;
-            }
-        }
-
-        private void EnsureTopScoreOwner()
-        {
-            if (!Networking.IsOwner(gameObject))
-            {
-                Networking.SetOwner(Networking.LocalPlayer, gameObject);
             }
         }
 

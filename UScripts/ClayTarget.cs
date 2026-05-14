@@ -48,6 +48,7 @@ namespace PigeonHunt
         private int activeVisualIndex = -1;
 
         public bool IsAvailable => !isActive;
+        public bool CanApplySyncedHit => isActive && !hasResolved && !isHitStateActive;
 
         private void Awake()
         {
@@ -156,6 +157,16 @@ namespace PigeonHunt
             }
 
             EnterHitState(hitPoint, hitNormal);
+        }
+
+        public void ApplySyncedHit()
+        {
+            if (!CanApplySyncedHit)
+            {
+                return;
+            }
+
+            EnterHitState(transform.position, -transform.forward);
         }
 
         public void DespawnImmediate()
