@@ -5,7 +5,6 @@ using UdonSharp;
 using UnityEngine;
 using UnityEngine.Serialization;
 
-[AddComponentMenu("PigeonHunt/Sound Manager")]
 [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
 public class SoundManager : UdonSharpBehaviour
 {
@@ -37,6 +36,7 @@ public class SoundManager : UdonSharpBehaviour
 
     [Header("Gun Audio")]
     public AudioSource shootAudio;
+    public AudioSource clayHitAudio;
 
     private const int SequenceNone = 0;
     private const int SequenceRoundClear = 1;

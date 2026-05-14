@@ -4,7 +4,6 @@ using UnityEngine.Serialization;
 
 namespace PigeonHunt
 {
-    [AddComponentMenu("PigeonHunt/Game Manager")]
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class GameManager : UdonSharpBehaviour
     {
@@ -35,6 +34,26 @@ namespace PigeonHunt
         [Header("Difficulty")]
         public float roundDifficultyStep = 0.25f;
         public float maxDifficultyMultiplier = 3f;
+        [Min(0f)]
+        [Tooltip("Mode1/Mode2 每过一关对每只目标的 escapeTriggerTime 统一减少的秒数。")]
+        public float pigeonEscapeTriggerReductionStep = 0.1f;
+        [Min(1)]
+        [Tooltip("escapeTriggerTime 递减最多生效到第几关，超过后不再继续减少。")]
+        public int pigeonEscapeTriggerReductionMaxRound = 15;
+        [Min(0f)]
+        [Tooltip("每只目标最终运行时 escapeTriggerTime 的最小值。")]
+        public float pigeonEscapeTriggerMinimum = 0.5f;
+        
+        [Header("Pigeon Boundary Reflection")]
+        [Range(0f, 1f)]
+        [Tooltip("第 1 关时，鸽子撞边后触发随机偏转的基础概率。")]
+        public float pigeonBoundaryRandomDeflectionChanceBase = 0f;
+        [Min(0f)]
+        [Tooltip("每过一关，鸽子撞边后触发随机偏转概率增加的数值。")]
+        public float pigeonBoundaryRandomDeflectionChanceStepPerRound = 0f;
+        [Range(0f, 1f)]
+        [Tooltip("鸽子撞边后触发随机偏转概率的最大值。")]
+        public float pigeonBoundaryRandomDeflectionChanceMax = 0f;
 
         [Header("Shot Reaction")]
         [Tooltip("Chance per shot for each flying, unhit pigeon to change direction.")]
@@ -94,6 +113,9 @@ namespace PigeonHunt
         [Header("Controller")]
         public ActionController actionController;
 
+        [Header("SyncController")]
+        public SyncController syncController;
+
         private const float DefaultDifficulty = 1f;
         private bool exitAnimationActive;
         private int exitAnimationPending;
@@ -126,9 +148,31 @@ namespace PigeonHunt
 
         public bool RoundActive => actionController != null && actionController.RoundActive;
         public float DifficultyMultiplier => actionController != null ? actionController.DifficultyMultiplier : DefaultDifficulty;
+        public float CurrentPigeonBoundaryRandomDeflectionChance => GetPigeonBoundaryRandomDeflectionChanceForRound(actionController != null ? actionController.CurrentRoundNumber : 1);
 
         private void Start()
         {
+            if (syncController != null && uiController != null)
+            {
+                if (syncController.syncedIndexChangedReceiver == null)
+                {
+                    syncController.syncedIndexChangedReceiver = this;
+                    syncController.syncedIndexChangedEventName = nameof(ApplySyncedModeSelection);
+                }
+
+                if (syncController.syncedStartReceiver == null)
+                {
+                    syncController.syncedStartReceiver = this;
+                    syncController.syncedStartEventName = nameof(ApplySyncedModeStart);
+                }
+
+                if (syncController.mode1RoundPlanReceiver == null)
+                {
+                    syncController.mode1RoundPlanReceiver = this;
+                    syncController.mode1RoundPlanEventName = nameof(ApplySyncedMode1RoundPlan);
+                }
+            }
+
             if (actionController != null)
             {
                 actionController.Initialize(this);
@@ -218,6 +262,21 @@ namespace PigeonHunt
             }
         }
 
+        public float GetPigeonBoundaryRandomDeflectionChanceForRound(int roundNumber)
+        {
+            var baseValue = Mathf.Clamp01(pigeonBoundaryRandomDeflectionChanceBase);
+            var maxValue = Mathf.Clamp01(Mathf.Max(baseValue, pigeonBoundaryRandomDeflectionChanceMax));
+            var stepValue = Mathf.Max(0f, pigeonBoundaryRandomDeflectionChanceStepPerRound);
+            return CalculateRoundScaledValue(roundNumber, baseValue, stepValue, maxValue);
+        }
+
+        private float CalculateRoundScaledValue(int roundNumber, float baseValue, float stepPerRound, float maxValue)
+        {
+            roundNumber = Mathf.Max(1, roundNumber);
+            var value = baseValue + ((roundNumber - 1) * stepPerRound);
+            return Mathf.Min(value, maxValue);
+        }
+
         public void ResetAndRestartGame()
         {
             exitAnimationActive = false;
@@ -288,7 +347,86 @@ namespace PigeonHunt
 
         public void HandleConfirmedModeSelection(int modeIndex)
         {
-            ScheduleModeStart(modeIndex);
+            if (syncController != null)
+            {
+                syncController.SyncStartIndex(modeIndex);
+                return;
+            }
+
+            StartConfirmedMode(modeIndex);
+        }
+
+        public void HandleModeSelectionChanged(int modeIndex)
+        {
+            if (syncController != null)
+            {
+                syncController.SetSyncedIndex(modeIndex);
+            }
+
+            if (uiController != null)
+            {
+                uiController.SetSyncedModeSelectionIndex(modeIndex);
+            }
+        }
+
+        public void ApplySyncedModeSelection()
+        {
+            if (syncController == null || uiController == null)
+            {
+                return;
+            }
+
+            var index = syncController.GetSyncedIndex();
+            if (index >= 0)
+            {
+                uiController.SetSyncedModeSelectionIndex(index);
+            }
+        }
+
+        public void ApplySyncedModeStart()
+        {
+            if (syncController == null)
+            {
+                return;
+            }
+
+            var modeIndex = syncController.GetSyncedStartIndex();
+            if (modeIndex < 0)
+            {
+                return;
+            }
+
+            if (uiController != null)
+            {
+                uiController.SetSyncedModeSelectionIndex(modeIndex);
+            }
+
+            StartConfirmedMode(modeIndex);
+        }
+
+        public void SyncStartModeA()
+        {
+            HandleConfirmedModeSelection(0);
+        }
+
+        public void SyncStartModeB()
+        {
+            HandleConfirmedModeSelection(1);
+        }
+
+        public void SyncStartModeC()
+        {
+            HandleConfirmedModeSelection(2);
+        }
+
+        public void ApplySyncedMode1RoundPlan()
+        {
+            if (syncController == null || actionController == null)
+            {
+                return;
+            }
+
+            actionController.ApplyMode1RoundPlan(syncController.GetMode1RoundNumber(), syncController.GetMode1RoundSeed());
         }
 
         private bool TryRestartOnGameOver()

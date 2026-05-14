@@ -4,7 +4,6 @@ using UnityEngine.UIElements;
 
 namespace PigeonHunt
 {
-    [AddComponentMenu("PigeonHunt/Action Controller")]
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class ActionController : UdonSharpBehaviour
     {
@@ -59,6 +58,9 @@ namespace PigeonHunt
         private bool gameLocked;
         private bool carryScorePending;
         private int carryScoreValue;
+        private int mode1PlanRoundNumber;
+        private int mode1PlanSeed;
+        private bool mode1PlanActive;
 
         private Vector3[] cachedCorners = new Vector3[4];
         private const int DirectionRight = 0;
@@ -314,6 +316,13 @@ namespace PigeonHunt
                 return;
             }
 
+            if (activeGameMode == GameModeSingle &&
+                manager.syncController != null &&
+                !ShouldUseMode1RoundPlan())
+            {
+                return;
+            }
+
             if (waitingForStartAnimation)
             {
                 if (startAnimationTimer > 0f)
@@ -417,10 +426,23 @@ namespace PigeonHunt
             UpdateDifficultyForCurrentRound();
             ResetRoundRuntimeState();
             roundDifficultyBonus = CalculateRoundDifficultyBonus();
+            EnsureMode1RoundPlanForCurrentRound();
 
             ResetUIForCurrentRound();
 
             BeginStartAnimation();
+        }
+
+        public void ApplyMode1RoundPlan(int roundNumber, int seed)
+        {
+            if (roundNumber <= 0)
+            {
+                return;
+            }
+
+            mode1PlanRoundNumber = roundNumber;
+            mode1PlanSeed = seed;
+            mode1PlanActive = true;
         }
 
         public void DebugTriggerStartAnimation()
@@ -715,6 +737,12 @@ namespace PigeonHunt
 
             if (CountActivePigeons() <= 0)
             {
+                return;
+            }
+
+            if (IsPairModeActive())
+            {
+                BeginNaturalEscapeForActivePigeons();
                 return;
             }
 
@@ -1026,7 +1054,13 @@ namespace PigeonHunt
                 return false;
             }
 
-            var pigeon = GetAvailablePigeon();
+            var plannedPoolIndex = -1;
+            if (ShouldUseMode1RoundPlan())
+            {
+                plannedPoolIndex = GetMode1PlannedPigeonPoolIndex(pigeonsSpawnedThisRound);
+            }
+
+            var pigeon = plannedPoolIndex >= 0 ? GetAvailablePigeonByPoolIndex(plannedPoolIndex) : GetAvailablePigeon();
 
             if (pigeon == null)
             {
@@ -1037,7 +1071,7 @@ namespace PigeonHunt
 
             Vector3 startPosition;
             int directionIndex;
-            if (!TryBuildSpawnParameters(out startPosition, out directionIndex))
+            if (!TryBuildSpawnParametersForSpawnIndex(pigeonsSpawnedThisRound, out startPosition, out directionIndex))
             {
                 spawnTimer = 0.25f;
 
@@ -1047,7 +1081,7 @@ namespace PigeonHunt
             pigeon.SetPlayArea(manager.playArea);
             spawnIndex = pigeonsSpawnedThisRound;
             spawnedPigeon = pigeon;
-            pigeon.BeginFlight(startPosition, directionIndex, 0f, DifficultyMultiplier);
+            pigeon.BeginFlight(startPosition, directionIndex, 0f, DifficultyMultiplier, GetCurrentPigeonEscapeTriggerReduction(), manager.pigeonEscapeTriggerMinimum);
             pigeonsSpawnedThisRound++;
             BeginWaveIfNeeded();
             LogPigeonSpawnWave(spawnIndex);
@@ -1058,6 +1092,16 @@ namespace PigeonHunt
             }
 
             return true;
+        }
+
+        private bool TryBuildSpawnParametersForSpawnIndex(int spawnIndex, out Vector3 startPosition, out int directionIndex)
+        {
+            if (ShouldUseMode1RoundPlan())
+            {
+                return TryBuildMode1PlannedSpawnParameters(spawnIndex, out startPosition, out directionIndex);
+            }
+
+            return TryBuildSpawnParameters(out startPosition, out directionIndex);
         }
 
         private bool TryBuildSpawnParameters(out Vector3 startPosition, out int directionIndex)
@@ -1084,6 +1128,29 @@ namespace PigeonHunt
             return true;
         }
 
+        private bool TryBuildMode1PlannedSpawnParameters(int spawnIndex, out Vector3 startPosition, out int directionIndex)
+        {
+            startPosition = Vector3.zero;
+            directionIndex = DirectionRight;
+
+            if (manager.playArea == null)
+            {
+                return false;
+            }
+
+            if (!QychuiUtilities.TryGetRectWorldBounds(manager.playArea, cachedCorners, out float minX, out float maxX, out float minY, out float maxY, out float planeZ))
+            {
+                return false;
+            }
+
+            startPosition.y = minY;
+            startPosition.x = SamplePlannedWithin(minX, maxX, manager.bottomEdgeSpawnSegment, spawnIndex, 17);
+            directionIndex = SampleMode1PlannedBottomEdgeDirection(spawnIndex);
+            startPosition.z = planeZ;
+
+            return true;
+        }
+
         private float SampleWithin(float min, float max, float segmentInset)
         {
             var clampedInset = Mathf.Max(0f, segmentInset);
@@ -1105,12 +1172,33 @@ namespace PigeonHunt
             return Random.Range(paddedMin, paddedMax);
         }
 
+        private float SamplePlannedWithin(float min, float max, float segmentInset, int spawnIndex, int salt)
+        {
+            var clampedInset = Mathf.Max(0f, segmentInset);
+            var paddedMin = min + clampedInset;
+            var paddedMax = max - clampedInset;
+
+            if (paddedMin > paddedMax)
+            {
+                var midpoint = (min + max) * 0.5f;
+                paddedMin = midpoint;
+                paddedMax = midpoint;
+            }
+
+            if (Mathf.Approximately(paddedMin, paddedMax))
+            {
+                return paddedMin;
+            }
+
+            return Mathf.Lerp(paddedMin, paddedMax, GetMode1Plan01(spawnIndex, salt));
+        }
+
         private void LogPigeonSpawnWave(int spawnIndex)
         {
             var displayIndex = Mathf.Max(1, spawnIndex + 1);
-            var waveType = IsPairModeActive() ? "Pair" : "Single";
+            var waveType = IsPairModeActive() ? "ModeB" : "ModeA";
             Debug.Log(
-                $"<color=#32C8FF>[Pigeon Wave]</color> {waveType} wave {displayIndex}/{Mathf.Max(1, targetQuotaThisRound)} started.");
+                $"<color=#32C8FF>[Wave]</color> {waveType} wave {displayIndex}/{Mathf.Max(1, targetQuotaThisRound)} started.");
         }
 
         private void BeginWaveIfNeeded()
@@ -1241,6 +1329,11 @@ namespace PigeonHunt
             return DirectionRightUp;
         }
 
+        private int SampleMode1PlannedBottomEdgeDirection(int spawnIndex)
+        {
+            return GetMode1PlanBit(spawnIndex, 29) == 0 ? DirectionLeftUp : DirectionRightUp;
+        }
+
         private PigeonTarget GetAvailablePigeon()
         {
             if (manager.pigeonPool == null)
@@ -1284,6 +1377,65 @@ namespace PigeonHunt
             return null;
         }
 
+        private PigeonTarget GetAvailablePigeonByPoolIndex(int poolIndex)
+        {
+            if (manager.pigeonPool == null || poolIndex < 0 || poolIndex >= manager.pigeonPool.Length)
+            {
+                return null;
+            }
+
+            var pigeon = manager.pigeonPool[poolIndex];
+            if (pigeon != null && pigeon.IsAvailable)
+            {
+                return pigeon;
+            }
+
+            return GetAvailablePigeon();
+        }
+
+        private int GetMode1PlannedPigeonPoolIndex(int spawnIndex)
+        {
+            if (manager == null || manager.pigeonPool == null || manager.pigeonPool.Length == 0)
+            {
+                return -1;
+            }
+
+            return Mathf.Abs(GetMode1PlanValue(spawnIndex, 41)) % manager.pigeonPool.Length;
+        }
+
+        private bool ShouldUseMode1RoundPlan()
+        {
+            return activeGameMode == GameModeSingle &&
+                   mode1PlanActive &&
+                   mode1PlanRoundNumber == GetDisplayedRoundNumber();
+        }
+
+        private int GetMode1PlanBit(int spawnIndex, int salt)
+        {
+            return GetMode1PlanValue(spawnIndex, salt) & 1;
+        }
+
+        private float GetMode1Plan01(int spawnIndex, int salt)
+        {
+            var value = GetMode1PlanValue(spawnIndex, salt) & 0x7fffffff;
+            return value / 2147483647f;
+        }
+
+        private int GetMode1PlanValue(int spawnIndex, int salt)
+        {
+            unchecked
+            {
+                var value = mode1PlanSeed;
+                value = (value * 397) ^ mode1PlanRoundNumber;
+                value = (value * 397) ^ spawnIndex;
+                value = (value * 397) ^ salt;
+                value ^= value << 13;
+                value ^= value >> 17;
+                value ^= value << 5;
+                return value;
+            }
+        }
+
         private int CountActivePigeons()
         {
             if (manager.pigeonPool == null)
@@ -1302,6 +1454,25 @@ namespace PigeonHunt
             }
 
             return count;
+        }
+
+        private void BeginNaturalEscapeForActivePigeons()
+        {
+            if (manager == null || manager.pigeonPool == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < manager.pigeonPool.Length; i++)
+            {
+                var pigeon = manager.pigeonPool[i];
+                if (pigeon == null || !pigeon.OccupiesSlot)
+                {
+                    continue;
+                }
+
+                pigeon.TryBeginNaturalEscape();
+            }
         }
 
         private void InitializePool()
@@ -1391,6 +1562,31 @@ namespace PigeonHunt
             lastResolutionWasHit = false;
             lastHitPigeon = null;
             ResetWaveTracking();
+        }
+
+        private void EnsureMode1RoundPlanForCurrentRound()
+        {
+            if (manager == null || activeGameMode != GameModeSingle)
+            {
+                mode1PlanActive = false;
+                return;
+            }
+
+            var roundNumber = GetDisplayedRoundNumber();
+            if (mode1PlanActive && mode1PlanRoundNumber == roundNumber)
+            {
+                return;
+            }
+
+            if (manager.syncController != null && VRC.SDKBase.Networking.IsOwner(manager.syncController.gameObject))
+            {
+                var seed = Random.Range(1, int.MaxValue);
+                ApplyMode1RoundPlan(roundNumber, seed);
+                manager.syncController.SyncMode1RoundPlan(roundNumber, seed);
+                return;
+            }
+
+            mode1PlanActive = false;
         }
 
         private float GetPairModeLaunchDelay()
@@ -1510,6 +1706,18 @@ namespace PigeonHunt
             var maxBonus = Mathf.Max(0f, manager.maxDifficultyMultiplier - 1f);
             var desired = Mathf.Max(0f, (currentRoundIndex - 1) * manager.roundDifficultyStep);
             return Mathf.Min(desired, maxBonus);
+        }
+
+        private float GetCurrentPigeonEscapeTriggerReduction()
+        {
+            if (manager == null)
+            {
+                return 0f;
+            }
+
+            var maxRound = Mathf.Max(1, manager.pigeonEscapeTriggerReductionMaxRound);
+            var reductionRounds = Mathf.Clamp(currentRoundIndex - 1, 0, maxRound - 1);
+            return Mathf.Max(0f, reductionRounds * manager.pigeonEscapeTriggerReductionStep);
         }
 
         private void UpdateDifficultyForCurrentRound()

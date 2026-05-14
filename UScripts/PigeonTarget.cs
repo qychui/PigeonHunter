@@ -12,7 +12,6 @@ namespace PigeonHunt
         Red = 2
     }
 
-    [AddComponentMenu("PigeonHunt/Pigeon Target")]
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class PigeonTarget : UdonSharpBehaviour
     {
@@ -30,6 +29,10 @@ namespace PigeonHunt
 
         [Header("Movement (Normalized)")]
         [SerializeField] private float normalizedSpeedPerSecond = 0.25f;
+
+        [Header("Boundary Reflection")]
+        [Min(0f)]
+        [SerializeField] private float boundaryRandomDeflectionAngle = 0f;
 
         [Header("Lifetime")]
         [SerializeField] private float defaultLifetime = 12f;
@@ -91,10 +94,12 @@ namespace PigeonHunt
         private float speedMultiplier = 1f;
         private float elapsed;
         private float lifetime;
+        private float runtimeEscapeTriggerTime;
         private float exitTimer;
         private bool escapeArmed;
         private bool escapeActive;
         private float escapeTimer;
+        private bool naturalEscapeActive;
         private bool fallAnimationPending;
         private float fallAnimationTimer;
         private bool isHitHoldActive;
@@ -204,7 +209,7 @@ namespace PigeonHunt
             RefreshMovementBounds();
         }
 
-        public void BeginFlight(Vector3 startPosition, int directionIndex, float lifetimeSeconds, float difficultyMultiplier)
+        public void BeginFlight(Vector3 startPosition, int directionIndex, float lifetimeSeconds, float difficultyMultiplier, float escapeTriggerReduction, float minimumEscapeTriggerTime)
         {
             RefreshMovementBounds();
 
@@ -218,6 +223,7 @@ namespace PigeonHunt
             speedMultiplier = Mathf.Max(0.5f, difficultyMultiplier);
 
             lifetime = lifetimeSeconds > 0f ? lifetimeSeconds : defaultLifetime;
+            runtimeEscapeTriggerTime = Mathf.Max(Mathf.Max(0f, minimumEscapeTriggerTime), escapeTriggerTime - Mathf.Max(0f, escapeTriggerReduction));
 
             elapsed = 0f;
             exitActive = false;
@@ -229,7 +235,8 @@ namespace PigeonHunt
             resolvedAsHit = false;
             escapeActive = false;
             escapeTimer = 0f;
-            escapeArmed = escapeTriggerTime <= 0f;
+            naturalEscapeActive = false;
+            escapeArmed = runtimeEscapeTriggerTime <= 0f;
             fallAnimationPending = false;
             fallAnimationTimer = 0f;
             isHitHoldActive = false;
@@ -276,6 +283,17 @@ namespace PigeonHunt
             }
 
             BeginExitFlightInternal(false);
+            return true;
+        }
+
+        public bool TryBeginNaturalEscape()
+        {
+            if (!isActive || isDespawning || hasBeenHit || exitActive || escapeActive || naturalEscapeActive)
+            {
+                return false;
+            }
+
+            BeginNaturalEscape();
             return true;
         }
 
@@ -383,6 +401,7 @@ namespace PigeonHunt
             escapeArmed = false;
             escapeActive = false;
             escapeTimer = 0f;
+            naturalEscapeActive = false;
             fallAnimationPending = false;
             fallAnimationTimer = 0f;
 
@@ -533,6 +552,7 @@ namespace PigeonHunt
             escapeArmed = false;
             escapeActive = false;
             escapeTimer = 0f;
+            naturalEscapeActive = false;
             fallAnimationPending = false;
             fallAnimationTimer = 0f;
             isHitHoldActive = false;
@@ -830,15 +850,31 @@ namespace PigeonHunt
                 return;
             }
 
-            if (!hasBeenHit && !exitActive && !escapeActive && escapeTriggerTime > 0f && elapsed >= escapeTriggerTime)
+            if (!hasBeenHit && !exitActive && !escapeActive && !naturalEscapeActive && runtimeEscapeTriggerTime > 0f && elapsed >= runtimeEscapeTriggerTime)
             {
-                BeginExitFlightInternal(true);
+                if (gameManager != null && gameManager.gameMode == 2)
+                {
+                    BeginNaturalEscape();
+                }
+                else
+                {
+                    BeginExitFlightInternal(true);
+                }
+
                 return;
             }
 
-            if (!hasBeenHit && lifetime > 0f && elapsed >= lifetime)
+            if (!hasBeenHit && !naturalEscapeActive && lifetime > 0f && elapsed >= lifetime)
             {
-                BeginExitFlightInternal(true);
+                if (gameManager != null && gameManager.gameMode == 2)
+                {
+                    BeginNaturalEscape();
+                }
+                else
+                {
+                    BeginExitFlightInternal(true);
+                }
+
                 return;
             }
 
@@ -874,6 +910,20 @@ namespace PigeonHunt
                 escapeTimer -= deltaTime;
 
                 if (escapeTimer <= 0f)
+                {
+                    BeginExpirySequence(position, false);
+                }
+
+                return;
+            }
+
+            if (naturalEscapeActive)
+            {
+                position = nextPosition;
+                position.z = planeZ;
+                transform.position = position;
+
+                if (IsOutsideRecycleBounds(position))
                 {
                     BeginExpirySequence(position, false);
                 }
@@ -956,12 +1006,14 @@ namespace PigeonHunt
             escapeArmed = false;
             escapeActive = false;
             escapeTimer = 0f;
+            naturalEscapeActive = false;
             fallAnimationPending = false;
             fallAnimationTimer = 0f;
             isHitHoldActive = false;
             hitHoldTimer = 0f;
             isShotDown = false;
             shotDownTimer = 0f;
+            naturalEscapeActive = false;
 
             position = stopPosition;
             position.z = planeZ;
@@ -1018,6 +1070,7 @@ namespace PigeonHunt
             hitHoldTimer = 0f;
             isShotDown = false;
             shotDownTimer = 0f;
+            naturalEscapeActive = false;
 
             if (animator != null)
             {
@@ -1049,6 +1102,23 @@ namespace PigeonHunt
             }
         }
 
+        private void BeginNaturalEscape()
+        {
+            escapeActive = false;
+            escapeArmed = false;
+            escapeTimer = 0f;
+            naturalEscapeActive = true;
+            lifetime = 0f;
+        }
+
+        private bool IsOutsideRecycleBounds(Vector3 targetPosition)
+        {
+            return targetPosition.x < minX - colliderExtents.x ||
+                   targetPosition.x > maxX + colliderExtents.x ||
+                   targetPosition.y < minY - colliderExtents.y ||
+                   targetPosition.y > maxY + colliderExtents.y;
+        }
+
         private void ReflectDirection(int edge)
         {
             var reflected = direction;
@@ -1063,7 +1133,61 @@ namespace PigeonHunt
                 reflected.y = -reflected.y;
             }
 
+            reflected = ApplyRandomReflectionDeflection(reflected, edge);
             ApplyMovementDirection(reflected);
+        }
+
+        private Vector3 ApplyRandomReflectionDeflection(Vector3 reflected, int edge)
+        {
+            var deflectionChance = gameManager != null ? gameManager.CurrentPigeonBoundaryRandomDeflectionChance : 0f;
+            var deflectionAngle = Mathf.Max(0f, boundaryRandomDeflectionAngle);
+
+            if (deflectionChance <= 0f ||
+                deflectionAngle <= 0f ||
+                Random.value > deflectionChance)
+            {
+                return reflected;
+            }
+
+            var angleOffset = Random.Range(-deflectionAngle, deflectionAngle);
+            var rotated = Quaternion.Euler(0f, 0f, angleOffset) * reflected;
+            rotated.z = 0f;
+
+            if (rotated.sqrMagnitude <= 0.0001f)
+            {
+                return reflected;
+            }
+
+            rotated.Normalize();
+
+            // Keep the post-bounce direction moving back into the play area.
+            if (!IsValidReflectedDirection(edge, reflected, rotated))
+            {
+                return reflected;
+            }
+
+            return rotated;
+        }
+
+        private bool IsValidReflectedDirection(int edge, Vector3 reflected, Vector3 candidate)
+        {
+            const float epsilon = 0.0001f;
+
+            if ((edge == EdgeX || edge == EdgeCorner) &&
+                Mathf.Abs(reflected.x) > epsilon &&
+                Mathf.Sign(candidate.x) != Mathf.Sign(reflected.x))
+            {
+                return false;
+            }
+
+            if ((edge == EdgeY || edge == EdgeCorner) &&
+                Mathf.Abs(reflected.y) > epsilon &&
+                Mathf.Sign(candidate.y) != Mathf.Sign(reflected.y))
+            {
+                return false;
+            }
+
+            return true;
         }
 
         private int SnapToBounds(ref Vector3 targetPosition)

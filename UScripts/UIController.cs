@@ -7,6 +7,7 @@ using PigeonHunt;
 
 namespace PigeonHunt 
 {
+    [UdonBehaviourSyncMode(BehaviourSyncMode.Manual)]
     public class UIController : UdonSharpBehaviour
     {
         [Header("Title Screen")]
@@ -103,7 +104,9 @@ namespace PigeonHunt
         [Min(0f)]
         public float roundDisplayTime = 2f;
 
-        [UdonSynced] private int _topScoreValue;
+        [UdonSynced] private int _modeATopScoreValue;
+        [UdonSynced] private int _modeBTopScoreValue;
+        [UdonSynced] private int _modeCTopScoreValue;
         private int _pigeonQuota = 10;
         private int _hitCountThisRound;
         private int _primaryMaskIndex = -1;
@@ -257,7 +260,14 @@ namespace PigeonHunt
 
             if (hitIndex != _selectedModeIndex)
             {
-                SetSelectedModeIndex(hitIndex);
+                if (gameManager != null)
+                {
+                    gameManager.HandleModeSelectionChanged(hitIndex);
+                }
+                else
+                {
+                    SetSyncedModeSelectionIndex(hitIndex);
+                }
                 return true;
             }
 
@@ -267,6 +277,16 @@ namespace PigeonHunt
             }
 
             return true;
+        }
+
+        public int GetSelectedModeIndex()
+        {
+            return _selectedModeIndex;
+        }
+
+        public void SetSyncedModeSelectionIndex(int index)
+        {
+            SetSelectedModeIndex(index);
         }
 
         public void SetGoodActive(bool active)
@@ -390,11 +410,19 @@ namespace PigeonHunt
                 scoreToCompare = Mathf.Clamp(scoreToCompare, 0, topScoreMax);
             }
 
-            if (scoreToCompare > _topScoreValue)
+            var currentTopScore = GetSelectedModeTopScore();
+            if (scoreToCompare > currentTopScore)
             {
-                _topScoreValue = scoreToCompare;
+                EnsureTopScoreOwner();
+                SetSelectedModeTopScore(scoreToCompare);
+                RequestSerialization();
             }
 
+            UpdateTopScoreDigits();
+        }
+
+        public override void OnDeserialization()
+        {
             UpdateTopScoreDigits();
         }
 
@@ -726,11 +754,13 @@ namespace PigeonHunt
             if (optionCount <= 0)
             {
                 _selectedModeIndex = 0;
+                UpdateTopScoreDigits();
                 return;
             }
 
             _selectedModeIndex = Mathf.Clamp(index, 0, optionCount - 1);
             ApplyModeSelectionVisuals();
+            UpdateTopScoreDigits();
         }
 
         private void ApplyModeSelectionVisuals()
@@ -825,17 +855,55 @@ namespace PigeonHunt
 
         private void UpdateTopScoreDigits()
         {
+            var topScoreValue = GetSelectedModeTopScore();
             var capacityMax = GetDigitCapacityMax(topScoreDigitMaterials);
             if (capacityMax > 0)
             {
-                _topScoreValue = Mathf.Clamp(_topScoreValue, 0, capacityMax);
+                topScoreValue = Mathf.Clamp(topScoreValue, 0, capacityMax);
             }
             else
             {
-                _topScoreValue = Mathf.Max(0, _topScoreValue);
+                topScoreValue = Mathf.Max(0, topScoreValue);
             }
 
-            WriteNumberToDigitMaterials(topScoreDigitMaterials, _topScoreValue);
+            WriteNumberToDigitMaterials(topScoreDigitMaterials, topScoreValue);
+        }
+
+        private int GetSelectedModeTopScore()
+        {
+            switch (_selectedModeIndex)
+            {
+                case 1:
+                    return _modeBTopScoreValue;
+                case 2:
+                    return _modeCTopScoreValue;
+                default:
+                    return _modeATopScoreValue;
+            }
+        }
+
+        private void SetSelectedModeTopScore(int value)
+        {
+            switch (_selectedModeIndex)
+            {
+                case 1:
+                    _modeBTopScoreValue = value;
+                    break;
+                case 2:
+                    _modeCTopScoreValue = value;
+                    break;
+                default:
+                    _modeATopScoreValue = value;
+                    break;
+            }
+        }
+
+        private void EnsureTopScoreOwner()
+        {
+            if (!Networking.IsOwner(gameObject))
+            {
+                Networking.SetOwner(Networking.LocalPlayer, gameObject);
+            }
         }
 
         private void UpdateDifficultyObjects()

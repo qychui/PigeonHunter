@@ -13,7 +13,6 @@ namespace PigeonHunt
         EndRound
     }
 
-    [AddComponentMenu("PigeonHunt/MainAreaAnimation Controller")]
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class MainAreaAnimationController : UdonSharpBehaviour
     {

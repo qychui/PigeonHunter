@@ -3,7 +3,6 @@ using UnityEngine;
 
 namespace PigeonHunt
 {
-    [AddComponentMenu("PigeonHunt/Clay Target")]
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class ClayTarget : UdonSharpBehaviour
     {
