@@ -12,6 +12,9 @@ public class SyncController : UdonSharpBehaviour
     public AudioSource gunShotAudio;
     public AudioSource clayShotAudio;
     public ParticleSystem gunMuzzleFlash;
+    [Tooltip("Optional receiver called whenever gun shot flash objects should be shown.")]
+    public UdonSharpBehaviour gunShotFlashReceiver;
+    public string gunShotFlashEventName;
 
     [Header("Synced Objects")]
     [Tooltip("Simple synced active states. Supports the first 31 objects.")]
@@ -64,6 +67,11 @@ public class SyncController : UdonSharpBehaviour
     public UdonSharpBehaviour mode3ShotReceiver;
     public string mode3ShotEventName;
 
+    [Header("Mode3 Round Snapshot")]
+    [Tooltip("Optional receiver called when mode3 should realign at the next round start.")]
+    public UdonSharpBehaviour mode3RoundSnapshotReceiver;
+    public string mode3RoundSnapshotEventName;
+
     [Header("Flow Events")]
     [Tooltip("Receivers for simple indexed flow events.")]
     public UdonSharpBehaviour[] flowEventReceivers;
@@ -89,11 +97,17 @@ public class SyncController : UdonSharpBehaviour
     [UdonSynced] private int mode1RoundResultRequestId;
     [UdonSynced] private int mode1StartGateRoundNumber;
     [UdonSynced] private int mode1StartGateSeed;
+    [UdonSynced] private int mode3SnapshotRoundNumber;
+    [UdonSynced] private int mode3SnapshotScore;
+    [UdonSynced] private int mode3SnapshotDifficulty;
+    [UdonSynced] private int mode3RoundSnapshotRequestId;
+    [UdonSynced] private bool mode3RoundSnapshotActive;
     private int handledStartRequestId;
     private int handledMode1RoundPlanRequestId;
     private int handledMode1HitRequestId;
     private int handledMode1ShotRequestId;
     private int handledMode1RoundResultRequestId;
+    private int handledMode3RoundSnapshotRequestId;
     private int mode3WaveRoundNumber;
     private int mode3WaveIndex;
     private int mode3WaveSeed;
@@ -165,9 +179,20 @@ public class SyncController : UdonSharpBehaviour
         QychuiUtilities.SafePlay(gunMuzzleFlash);
     }
 
+    public void SyncGunShotFlash()
+    {
+        NetworkShowGunShotFlash();
+        SendCustomNetworkEvent(NetworkEventTarget.Others, nameof(NetworkShowGunShotFlash));
+    }
+
+    public void NetworkShowGunShotFlash()
+    {
+        SendReceiverEvent(gunShotFlashReceiver, gunShotFlashEventName);
+    }
+
     public bool HasGunShotEffects()
     {
-        return gunMuzzleFlash != null || gunShotAudio != null || clayShotAudio != null;
+        return gunMuzzleFlash != null || gunShotAudio != null || clayShotAudio != null || HasGunShotFlash();
     }
 
     public bool HasGunShotAudio()
@@ -178,6 +203,11 @@ public class SyncController : UdonSharpBehaviour
     public bool HasGunMuzzleFlash()
     {
         return gunMuzzleFlash != null;
+    }
+
+    public bool HasGunShotFlash()
+    {
+        return gunShotFlashReceiver != null && !string.IsNullOrEmpty(gunShotFlashEventName);
     }
 
     public void SetSyncedObjectActive(int objectIndex, bool active)
@@ -382,6 +412,70 @@ public class SyncController : UdonSharpBehaviour
         return mode3WaveSeed;
     }
 
+    public int GetMode3SnapshotRoundNumber()
+    {
+        return mode3SnapshotRoundNumber;
+    }
+
+    public int GetMode3SnapshotScore()
+    {
+        return mode3SnapshotScore;
+    }
+
+    public int GetMode3SnapshotDifficulty()
+    {
+        return mode3SnapshotDifficulty;
+    }
+
+    public bool GetMode3SnapshotActive()
+    {
+        return mode3RoundSnapshotActive;
+    }
+
+    public void SyncMode3RoundSnapshot(int roundNumber, int score, int difficulty)
+    {
+        EnsureLocalOwner();
+
+        mode3SnapshotRoundNumber = Mathf.Max(1, roundNumber);
+        mode3SnapshotScore = Mathf.Max(0, score);
+        mode3SnapshotDifficulty = Mathf.Max(0, difficulty);
+        mode3RoundSnapshotActive = true;
+        mode3RoundSnapshotRequestId++;
+        RequestSerialization();
+        SendCustomNetworkEvent(
+            NetworkEventTarget.Others,
+            nameof(NetworkApplyMode3RoundSnapshot),
+            mode3SnapshotRoundNumber,
+            mode3SnapshotScore,
+            mode3SnapshotDifficulty,
+            mode3RoundSnapshotRequestId);
+    }
+
+    [NetworkCallable]
+    public void NetworkApplyMode3RoundSnapshot(int roundNumber, int score, int difficulty, int requestId)
+    {
+        if (requestId == handledMode3RoundSnapshotRequestId)
+        {
+            return;
+        }
+
+        mode3SnapshotRoundNumber = Mathf.Max(1, roundNumber);
+        mode3SnapshotScore = Mathf.Max(0, score);
+        mode3SnapshotDifficulty = Mathf.Max(0, difficulty);
+        mode3RoundSnapshotActive = true;
+        mode3RoundSnapshotRequestId = requestId;
+        handledMode3RoundSnapshotRequestId = requestId;
+        SendReceiverEvent(mode3RoundSnapshotReceiver, mode3RoundSnapshotEventName);
+    }
+
+    public void ClearMode3RoundSnapshot()
+    {
+        EnsureLocalOwner();
+
+        mode3RoundSnapshotActive = false;
+        RequestSerialization();
+    }
+
     public void SyncMode3WaveStart(int roundNumber, int waveIndex, int seed)
     {
         EnsureLocalOwner();
@@ -486,6 +580,7 @@ public class SyncController : UdonSharpBehaviour
         ApplyMode1ShotEvent();
         ApplyMode1HitEvent();
         ApplyMode1RoundResult();
+        ApplyMode3RoundSnapshot();
     }
 
     public void SyncFlowEvent(int eventIndex)
@@ -557,7 +652,7 @@ public class SyncController : UdonSharpBehaviour
 
     private void ApplySyncedIndexObjects()
     {
-        if (syncedIndexObjects == null || syncedIndexObjects.Length == 0 || syncedIndex < 0)
+        if (syncedIndexObjects == null || syncedIndexObjects.Length == 0)
         {
             return;
         }
@@ -678,6 +773,17 @@ public class SyncController : UdonSharpBehaviour
 
         handledMode1RoundResultRequestId = mode1RoundResultRequestId;
         SendReceiverEvent(mode1RoundResultReceiver, mode1RoundResultEventName);
+    }
+
+    private void ApplyMode3RoundSnapshot()
+    {
+        if (!mode3RoundSnapshotActive || mode3RoundSnapshotRequestId == handledMode3RoundSnapshotRequestId || mode3SnapshotRoundNumber <= 0)
+        {
+            return;
+        }
+
+        handledMode3RoundSnapshotRequestId = mode3RoundSnapshotRequestId;
+        SendReceiverEvent(mode3RoundSnapshotReceiver, mode3RoundSnapshotEventName);
     }
 
 }

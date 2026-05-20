@@ -1,7 +1,10 @@
 ﻿using UdonSharp;
 using UnityEngine;
 using UnityEngine.Serialization;
+using VRC.Core;
+using VRC.SDK3.Components;
 using VRC.SDKBase;
+using VRC.Udon.Common.Interfaces;
 
 namespace PigeonHunt
 {
@@ -14,13 +17,13 @@ namespace PigeonHunt
 
         [Header("Pair Mode")]
         [Min(1)]
-        [Tooltip("Mode2 每轮生成的双鸽 wave 数量。每个 wave 固定生成 2 只鸽子。")]
+        [Tooltip("Number of paired-pigeon waves generated per Mode2 round. Each wave always spawns 2 pigeons.")]
         public int pairModeWaveCount = 5;
         [Min(0f)]
-        [Tooltip("Mode2 双鸽 wave 中第二只鸽子的最小延迟发射时间。")]
+        [Tooltip("Minimum launch delay for the second pigeon in each Mode2 paired wave.")]
         public float pairModeLaunchDelayMin = 0.05f;
         [Min(0f)]
-        [Tooltip("Mode2 双鸽 wave 中第二只鸽子的最大延迟发射时间。")]
+        [Tooltip("Maximum launch delay for the second pigeon in each Mode2 paired wave.")]
         public float pairModeLaunchDelayMax = 1.45f;
 
         [Header("Game Mode")]
@@ -36,24 +39,24 @@ namespace PigeonHunt
         public float roundDifficultyStep = 0.25f;
         public float maxDifficultyMultiplier = 4f;
         [Min(0f)]
-        [Tooltip("Mode1/Mode2 每过一关对每只目标的 escapeTriggerTime 统一减少的秒数。")]
+        [Tooltip("Seconds subtracted from each target's escapeTriggerTime per completed Mode1/Mode2 round.")]
         public float pigeonEscapeTriggerReductionStep = 0.2f;
         [Min(1)]
-        [Tooltip("escapeTriggerTime 递减最多生效到第几关，超过后不再继续减少。")]
+        [Tooltip("Last round where escapeTriggerTime reduction is applied. Later rounds keep the same reduction.")]
         public int pigeonEscapeTriggerReductionMaxRound = 15;
         [Min(0f)]
-        [Tooltip("每只目标最终运行时 escapeTriggerTime 的最小值。")]
+        [Tooltip("Minimum runtime escapeTriggerTime allowed for each target.")]
         public float pigeonEscapeTriggerMinimum = 4f;
-        
+
         [Header("Pigeon Boundary Reflection")]
         [Range(0f, 1f)]
-        [Tooltip("第 1 关时，鸽子撞边后触发随机偏转的基础概率。")]
+        [Tooltip("Base chance for random deflection when a pigeon hits a boundary on round 1.")]
         public float pigeonBoundaryRandomDeflectionChanceBase = 0f;
         [Min(0f)]
-        [Tooltip("每过一关，鸽子撞边后触发随机偏转概率增加的数值。")]
+        [Tooltip("Chance added per round for random deflection when a pigeon hits a boundary.")]
         public float pigeonBoundaryRandomDeflectionChanceStepPerRound = 0.03f;
         [Range(0f, 1f)]
-        [Tooltip("鸽子撞边后触发随机偏转概率的最大值。")]
+        [Tooltip("Maximum chance for random deflection when a pigeon hits a boundary.")]
         public float pigeonBoundaryRandomDeflectionChanceMax = 0.45f;
 
         [Header("Shot Reaction")]
@@ -117,7 +120,22 @@ namespace PigeonHunt
         [Header("SyncController")]
         public SyncController syncController;
 
+        [Header("Gun Respawn")]
+        public GameObject gunObject;
+        public Transform gunRespawnPoint;
+
+        [Header("Gun Shot Flash")]
+        public bool enableGunShotFlashObjects;
+        public GameObject[] gunShotFlashObjects;
+        [Min(0f)]
+        public float gunShotFlashDuration = 0.1f;
+
+        [Header("ScreenRetroTV Mask")]
+        public GameObject screenRetroTvMask;
+
         private const float DefaultDifficulty = 1f;
+        private bool gunShotFlashActive;
+        private float gunShotFlashTimer;
         private bool exitAnimationActive;
         private int exitAnimationPending;
         private bool pendingModeStart;
@@ -156,6 +174,11 @@ namespace PigeonHunt
         private int pendingSyncedClayHitUsedShots;
         private int pendingSyncedClayHitRound;
         private float pendingSyncedClayHitTimer;
+        private bool mode3RoundSnapshotPendingForJoiner;
+        private int handledMode3RoundSnapshotRound;
+        private Vector3 gunInitialPosition;
+        private Quaternion gunInitialRotation;
+        private bool gunInitialTransformCached;
         private const float PendingSyncedPigeonHitTimeout = 3f;
         private const float PendingSyncedClayHitTimeout = 3f;
         private const int ShootingRangeMaxDifficultyLevel = 4;
@@ -200,8 +223,48 @@ namespace PigeonHunt
             return syncController == null || syncController.IsLocalOwner();
         }
 
+        public void SyncRespawnGun()
+        {
+            ApplyRespawnGun(true);
+            SendCustomNetworkEvent(NetworkEventTarget.Others, nameof(NetworkRespawnGun));
+        }
+
+        public void NetworkRespawnGun()
+        {
+            ApplyRespawnGun(false);
+        }
+
+        public void SyncGunShotFlashObjects()
+        {
+            if (!enableGunShotFlashObjects)
+            {
+                return;
+            }
+
+            NetworkShowGunShotFlashObjects();
+            SendCustomNetworkEvent(NetworkEventTarget.Others, nameof(NetworkShowGunShotFlashObjects));
+        }
+
+        public void NetworkShowGunShotFlashObjects()
+        {
+            if (!enableGunShotFlashObjects)
+            {
+                return;
+            }
+
+            SetGunShotFlashObjectsActive(true);
+            gunShotFlashActive = true;
+            gunShotFlashTimer = Mathf.Max(0f, gunShotFlashDuration);
+
+            if (gunShotFlashTimer <= 0f)
+            {
+                HideGunShotFlashObjects();
+            }
+        }
+
         private void Start()
         {
+            CacheGunInitialTransform();
             BindSyncControllerReceivers();
 
             if (actionController != null)
@@ -279,6 +342,31 @@ namespace PigeonHunt
                 syncController.mode3ShotReceiver = this;
                 syncController.mode3ShotEventName = nameof(ApplySyncedMode3ShotMiss);
             }
+
+            if (syncController.mode3RoundSnapshotReceiver == null)
+            {
+                syncController.mode3RoundSnapshotReceiver = this;
+                syncController.mode3RoundSnapshotEventName = nameof(ApplySyncedMode3RoundSnapshot);
+            }
+
+            if (syncController.gunShotFlashReceiver == null)
+            {
+                syncController.gunShotFlashReceiver = this;
+                syncController.gunShotFlashEventName = nameof(NetworkShowGunShotFlashObjects);
+            }
+        }
+
+        public override void OnPlayerJoined(VRCPlayerApi player)
+        {
+            if (player == null || player.isLocal)
+            {
+                return;
+            }
+
+            if (IsLocalGameplayOwner() && IsShootingRangeModeWithSync() && shootingRangeSessionActive && !shootingRangeGameOver)
+            {
+                mode3RoundSnapshotPendingForJoiner = true;
+            }
         }
 
         public override void Interact()
@@ -303,6 +391,7 @@ namespace PigeonHunt
 
         private void Update()
         {
+            TickGunShotFlashObjects();
             TickPendingModeStart();
             TickShootingRangeSession();
             TickShootingRangeRoundEnd();
@@ -536,6 +625,19 @@ namespace PigeonHunt
                 syncController.GetMode3WaveRoundNumber(),
                 syncController.GetMode3WaveIndex(),
                 syncController.GetMode3WaveSeed());
+        }
+
+        public void ApplySyncedMode3RoundSnapshot()
+        {
+            if (syncController == null || !syncController.GetMode3SnapshotActive())
+            {
+                return;
+            }
+
+            ApplyMode3RoundSnapshot(
+                syncController.GetMode3SnapshotRoundNumber(),
+                syncController.GetMode3SnapshotScore(),
+                syncController.GetMode3SnapshotDifficulty());
         }
 
         private bool TryRestartOnGameOver()
@@ -1137,6 +1239,85 @@ namespace PigeonHunt
             ApplySyncedShootingRangeShotUsage(syncController.GetMode3ShotUsedShots());
         }
 
+        private void SyncMode3RoundSnapshotIfNeeded()
+        {
+            if (!mode3RoundSnapshotPendingForJoiner || !CanSendMode3Sync() || syncController == null || uiController == null)
+            {
+                return;
+            }
+
+            var nextRoundNumber = Mathf.Max(1, shootingRangeRoundsCompleted + 1);
+            syncController.SyncMode3RoundSnapshot(nextRoundNumber, uiController.scoreCurrent, GetShootingRangeDisplayedDifficultyLevel());
+            mode3RoundSnapshotPendingForJoiner = false;
+        }
+
+        private void ApplyMode3RoundSnapshot(int roundNumber, int score, int difficulty)
+        {
+            if (roundNumber <= 0 || IsLocalGameplayOwner())
+            {
+                return;
+            }
+
+            if (handledMode3RoundSnapshotRound == roundNumber)
+            {
+                return;
+            }
+
+            handledMode3RoundSnapshotRound = roundNumber;
+            gameMode = 3;
+            CancelPendingModeStart();
+
+            if (actionController != null)
+            {
+                actionController.Initialize(this);
+            }
+
+            shootingRangeSessionActive = true;
+            shootingRangeGameOver = false;
+            shootingRangeRoundsCompleted = Mathf.Max(0, roundNumber - 1);
+            shootingRangeRoundWaveCursor = 0;
+            shootingRangeLaunchedThisWave = 0;
+            shootingRangeResolvedThisWave = 0;
+            shootingRangeWaveShotWindowActive = false;
+            shootingRangeWaveShotsUsed = 0;
+            shootingRangeSecondClayPending = false;
+            shootingRangeSecondClayTimer = 0f;
+            shootingRangeNextWavePending = false;
+            shootingRangeNextWaveTimer = 0f;
+            shootingRangeHitsThisRound = 0;
+            shootingRangeRoundEndPending = false;
+            shootingRangeRoundPerfect = false;
+            shootingRangeRoundPassed = false;
+            shootingRangeRoundEndUiTriggered = false;
+            shootingRangeRoundEndAudioTriggered = false;
+            shootingRangeRoundRestartPending = false;
+            mode3OwnerWaveStartInProgress = false;
+            mode3SyncedWaveStartInProgress = false;
+            mode3WaveSeed = 0;
+            mode3WaveSeedActive = false;
+            ClearPendingSyncedClayHit();
+            ResetClayHitStateBuffer();
+            ResetShootingRangeWaveBulletUi();
+            DespawnAllClayTargets();
+
+            if (uiController == null)
+            {
+                return;
+            }
+
+            uiController.CancelShootingRangeIntro();
+            uiController.SetGameOverActive(false);
+            uiController.SetScoreValue(score);
+            uiController.SetRoundLevel(roundNumber);
+            uiController.SetDifficultyLevel(difficulty);
+            uiController.SetGoodActive(false);
+            uiController.ClearPerfectDisplay();
+            uiController.ClearClayTargetHitIndicators();
+            uiController.ClearActivePigeonMask();
+            ShowShootingRangeScene();
+            uiController.PlayShootingRangeIntro(this);
+        }
+
         public void NotifyClayAvailable(ClayTarget clayTarget, bool wasHit)
         {
             if (!shootingRangeSessionActive)
@@ -1286,6 +1467,7 @@ namespace PigeonHunt
             shootingRangeRoundWaveCursor = 0;
             if (uiController != null)
             {
+                uiController.SetScoreValue(0);
                 uiController.SetRoundLevel(1);
                 uiController.SetDifficultyLevel(GetShootingRangeDisplayedDifficultyLevel());
                 uiController.SetGoodActive(false);
@@ -1390,10 +1572,121 @@ namespace PigeonHunt
             }
         }
 
+        private void CacheGunInitialTransform()
+        {
+            if (gunObject == null)
+            {
+                return;
+            }
+
+            gunInitialPosition = gunObject.transform.position;
+            gunInitialRotation = gunObject.transform.rotation;
+            gunInitialTransformCached = true;
+        }
+
+        private void ApplyRespawnGun(bool takeOwnership)
+        {
+            if (gunObject == null)
+            {
+                return;
+            }
+
+            var targetPosition = gunInitialTransformCached ? gunInitialPosition : gunObject.transform.position;
+            var targetRotation = gunInitialTransformCached ? gunInitialRotation : gunObject.transform.rotation;
+            if (gunRespawnPoint != null)
+            {
+                targetPosition = gunRespawnPoint.position;
+                targetRotation = gunRespawnPoint.rotation;
+            }
+
+            var pickup = gunObject.GetComponent<VRCPickup>();
+            if (pickup != null)
+            {
+                pickup.Drop();
+            }
+
+            if (takeOwnership && Networking.LocalPlayer != null && !Networking.IsOwner(gunObject))
+            {
+                Networking.SetOwner(Networking.LocalPlayer, gunObject);
+            }
+
+            var body = gunObject.GetComponent<Rigidbody>();
+            if (takeOwnership && body != null && !body.isKinematic)
+            {
+                body.velocity = Vector3.zero;
+                body.angularVelocity = Vector3.zero;
+            }
+
+            gunObject.transform.SetPositionAndRotation(targetPosition, targetRotation);
+        }
+
+        private void TickGunShotFlashObjects()
+        {
+            if (!gunShotFlashActive)
+            {
+                return;
+            }
+
+            gunShotFlashTimer -= Time.deltaTime;
+            if (gunShotFlashTimer > 0f)
+            {
+                return;
+            }
+
+            HideGunShotFlashObjects();
+        }
+
+        private void HideGunShotFlashObjects()
+        {
+            gunShotFlashActive = false;
+            gunShotFlashTimer = 0f;
+            SetGunShotFlashObjectsActive(false);
+        }
+
+        private void SetGunShotFlashObjectsActive(bool active)
+        {
+            if (gunShotFlashObjects == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < gunShotFlashObjects.Length; i++)
+            {
+                var target = gunShotFlashObjects[i];
+                if (target != null && target.activeSelf != active)
+                {
+                    target.SetActive(active);
+                }
+            }
+        }
+
+        private void DespawnAllPigeons()
+        {
+            if (pigeonPool == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < pigeonPool.Length; i++)
+            {
+                var pigeon = pigeonPool[i];
+                if (pigeon == null)
+                {
+                    continue;
+                }
+
+                pigeon.SetManager(this);
+                pigeon.SetPlayArea(playArea);
+                pigeon.DespawnImmediate();
+            }
+        }
+
         private void ResetShootingRangeSessionState()
         {
             shootingRangeSessionActive = false;
             shootingRangeGameOver = false;
+            mode3RoundSnapshotPendingForJoiner = false;
+            handledMode3RoundSnapshotRound = 0;
             shootingRangeRoundWaveCursor = 0;
             shootingRangeLaunchedThisWave = 0;
             shootingRangeResolvedThisWave = 0;
@@ -1418,6 +1711,7 @@ namespace PigeonHunt
             ClearPendingSyncedClayHit();
             ResetClayHitStateBuffer();
             ResetShootingRangeWaveBulletUi();
+            ClearMode3RoundSnapshotIfOwner();
         }
 
         private void BeginNextShootingRangeWave()
@@ -1510,6 +1804,7 @@ namespace PigeonHunt
 
             mode3OwnerWaveStartInProgress = true;
             syncController.SyncMode3WaveStart(Mathf.Max(1, shootingRangeRoundsCompleted + 1), shootingRangeRoundWaveCursor, mode3WaveSeed);
+            ClearMode3RoundSnapshotIfOwner();
             mode3OwnerWaveStartInProgress = false;
         }
 
@@ -1640,14 +1935,15 @@ namespace PigeonHunt
             }
 
             target.SetManager(this);
-            target.BeginFlight(
+            target.BeginFlightInSpace(
                 spawnPosition,
                 endPosition,
                 hideHeightY,
                 duration,
                 peakHeight,
                 lifetime,
-                recycleDelay);
+                recycleDelay,
+                shootingRangeMoveArea);
 
             EnsureClayHitStateBuffer();
             if (shootingRangeClayHitStates != null && poolIndex < shootingRangeClayHitStates.Length)
@@ -2072,6 +2368,8 @@ namespace PigeonHunt
                 uiController.SetDifficultyLevel(GetShootingRangeDisplayedDifficultyLevel());
             }
 
+            SyncMode3RoundSnapshotIfNeeded();
+
             if (uiController != null)
             {
                 uiController.ClearClayTargetHitIndicators();
@@ -2080,6 +2378,14 @@ namespace PigeonHunt
             else
             {
                 BeginNextShootingRangeWave();
+            }
+        }
+
+        private void ClearMode3RoundSnapshotIfOwner()
+        {
+            if (syncController != null && IsLocalGameplayOwner())
+            {
+                syncController.ClearMode3RoundSnapshot();
             }
         }
 
@@ -2107,21 +2413,15 @@ namespace PigeonHunt
                 return false;
             }
 
-            if (!QychuiUtilities.TryGetRectWorldBounds(
-                moveArea,
-                shootingRangeCorners,
-                out float minX,
-                out float maxX,
-                out float minY,
-                out float maxY,
-                out float planeZ))
-            {
-                return false;
-            }
-
-            var width = Mathf.Max(0.0001f, maxX - minX);
-            var height = Mathf.Max(0.0001f, maxY - minY);
-            var startX = SampleWithin(minX, maxX, shootingRangeBottomSpawnSegment, GetMode3Wave01(11 + shootingRangeLaunchedThisWave));
+            var rect = moveArea.rect;
+            var minX = rect.xMin;
+            var maxX = rect.xMax;
+            var minY = rect.yMin;
+            var maxY = rect.yMax;
+            var width = Mathf.Max(0.0001f, rect.width);
+            var height = Mathf.Max(0.0001f, rect.height);
+            var localInset = ConvertWorldHorizontalInsetToLocal(moveArea, shootingRangeBottomSpawnSegment);
+            var startX = SampleWithin(minX, maxX, localInset, GetMode3Wave01(11 + shootingRangeLaunchedThisWave));
             var startY = minY;
             var centerX = (minX + maxX) * 0.5f;
             var moveRight = startX <= centerX;
@@ -2147,13 +2447,24 @@ namespace PigeonHunt
             hideHeightY = minY + (height * SampleRange(endHeightMinRatio, endHeightMaxRatio, GetMode3Wave01(41 + shootingRangeLaunchedThisWave)));
             hideHeightY = Mathf.Clamp(hideHeightY, minY, maxY);
 
-            spawnPosition = new Vector3(startX, startY, planeZ);
-            endPosition = new Vector3(endX, startY, planeZ);
+            spawnPosition = new Vector3(startX, startY, 0f);
+            endPosition = new Vector3(endX, startY, 0f);
             duration = lifetimeSeconds;
             lifetime = lifetimeSeconds;
             recycleDelay = Mathf.Max(0f, shootingRangeHideRecycleDelay);
 
             return true;
+        }
+
+        private float ConvertWorldHorizontalInsetToLocal(RectTransform area, float worldInset)
+        {
+            if (area == null)
+            {
+                return Mathf.Max(0f, worldInset);
+            }
+
+            var scale = Mathf.Max(0.0001f, Mathf.Abs(area.lossyScale.x));
+            return Mathf.Max(0f, worldInset) / scale;
         }
 
         private float SampleWithin(float min, float max, float segmentInset)
@@ -2255,6 +2566,21 @@ namespace PigeonHunt
             SetGameObjectActive(uiController.titleScreenObject, false);
             SetGameObjectActive(uiController.modeABSceneObject, false);
             SetGameObjectActive(uiController.shootingRangeSceneObject, true);
+        }
+
+        public void ScreenRetroTvMaskToggle()
+        {
+            if (screenRetroTvMask == null)
+            {
+                return;
+            }
+
+            screenRetroTvMask.SetActive(!screenRetroTvMask.activeSelf);
+        }
+
+        public void GunShotFlashToggle()
+        {
+            enableGunShotFlashObjects = !enableGunShotFlashObjects;
         }
     }
 }

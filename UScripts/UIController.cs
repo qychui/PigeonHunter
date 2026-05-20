@@ -26,38 +26,38 @@ namespace PigeonHunt
         public int weaponType = 0;
         public int bulletMaxCount = 3;
         public int bulletCurrentCount = 0;
-        [Tooltip("不同武器类型的图标，索引与weaponType对应。")]
+        [Tooltip("Icons for each weapon type. Indexes match weaponType values.")]
         public GameObject[] weaponIcons;
-        [Tooltip("子弹显示用的图标，从左到右依次启用。")]
+        [Tooltip("Bullet display icons, enabled from left to right.")]
         public GameObject[] bulletObject;
 
         [Header("RoundLevel UI")]
-        public int roundLevel = 1; //最大99轮
-        [Tooltip("轮次两位数显示，每个元素对应一位，对应的材质会被写入_Index。")]
+        public int roundLevel = 1; // Maximum 99 rounds.
+        [Tooltip("Two-digit round display. Each element maps to one digit and writes into the material _Index.")]
         public Material[] roundLevelDigitMaterials;
 
         [Header("InfoBar UI")]
         public int difficulty = 0;
-        [Tooltip("按顺序配置五个难度的显示对象，当前难度对应的对象会被点亮。")]
+        [Tooltip("Display objects for the five difficulty levels in order. The current level is highlighted.")]
         public GameObject[] difficultyLevelObjects;
-        [Tooltip("十只鸽子击中显示的对象，true代表该只鸽子被击落。")]
+        [Tooltip("Hit indicator objects for ten pigeons. Active means the corresponding pigeon was hit.")]
         public GameObject[] pigeonHitIndicators;
-        [Tooltip("十只移动靶击中显示的对象，true代表该只移动靶被击落。")]
+        [Tooltip("Hit indicator objects for ten clay targets. Active means the corresponding target was hit.")]
         public GameObject[] clayTargetHitIndicators;
         [Min(0f)]
-        [Tooltip("回合结算时命中数动画的延迟间隔。")]
+        [Tooltip("Delay interval for the hit-count animation during round settlement.")]
         public float pigeonHitCountAnimDelay = 0.15f;
         [Min(0f)]
-        [Tooltip("全命中动画的闪烁间隔。")]
+        [Tooltip("Blink interval for the perfect-hit animation.")]
         public float fullHitBlinkDelay = 0.25f;
         [Min(1)]
-        [Tooltip("全命中动画的闪烁轮数。每轮包含关闭和打开一次。")]
+        [Tooltip("Number of blink cycles for the perfect-hit animation. Each cycle includes one off and one on state.")]
         public int fullHitBlinkCycles = 8;
-        [Tooltip("回合结算时命中数动画音效。")]
+        [Tooltip("SFX played during the round-settlement hit-count animation.")]
         public AudioSource hitSfx;
-        [Tooltip("全局音效管理器。")]
+        [Tooltip("Global sound manager.")]
         public SoundManager soundManager;
-        [Tooltip("十只鸽子的遮罩对象，对应出现的鸽子会闪烁。")]
+        [Tooltip("Mask objects for ten pigeons. The mask for each spawned pigeon blinks.")]
         public GameObject[] pigeonMaskObjects;
         public float maskDelay = 0.4f;
 
@@ -66,9 +66,9 @@ namespace PigeonHunt
         public int maxScore = 999999;
         [Tooltip("Points awarded for each pigeon hit.")]
         public int scorePerHit = 500;
-        [Tooltip("6位数的分数显示，每个元素对应一个材质实例。")]
+        [Tooltip("Six-digit score display. Each element maps to one material instance.")]
         public Material[] scoreDigitMaterials;
-        [Tooltip("ScoreShader的_Index属性名，驱动具体数字显示。")]
+        [Tooltip("ScoreShader _Index property name used to drive the displayed digit.")]
         public string digitShaderIndexProperty = "_Index";
 
         [Header("Fly Away UI")]

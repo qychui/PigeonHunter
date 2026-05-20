@@ -34,6 +34,11 @@ namespace PigeonHunt
         [SerializeField] private GameObject roundEnd;
         [SerializeField] private GameObject roundNext;
 
+        [Header("VRCDogObject")]
+        [SerializeField] private GameObject lmfao_VRCDog;
+        [Range(0f, 1f)]
+        [SerializeField] private float lmfaoVRCDogChance = 0.05f;
+
         [Header("GotOne Objects")]
         [SerializeField] private GameObject gotOneBlack;
         [SerializeField] private GameObject gotOneBlue;
@@ -100,9 +105,11 @@ namespace PigeonHunt
         [Tooltip("Additional normalized distance to drop below the baseline near the end of the arc.")]
         [Min(0f)]
         [SerializeField] private float roundStartArcExtraDropDistance = 0.1f;
-        [Tooltip("Seconds from arc start before changing dog sorting order.")]
+        [Tooltip("Hide the round start/next dog object after it starts falling from the arc peak.")]
+        [SerializeField] private bool hideDogAfterArcPeak = false;
+        [Tooltip("Seconds after the arc peak before hiding the round start/next dog object.")]
         [Min(0f)]
-        [SerializeField] private float ArcLayerChangedTime = 0.2f;
+        [SerializeField] private float hideDogAfterArcPeakDelay = 0.2f;
 
         [Header("Round Next Movement")]
         [Min(0f)]
@@ -209,6 +216,8 @@ namespace PigeonHunt
         private bool roundNextArcLayerChanged;
         private Vector3 roundNextArcBasePosition;
         private readonly Vector3[] roundNextMovementAreaCorners = new Vector3[4];
+        private const int DogSortingOrderFront = 3;
+        private const int DogSortingOrderBack = 1;
         private const int MovementPhaseMoveUp = 0;
         private const int MovementPhaseSlowdown = 1;
         private const int MovementPhasePause = 2;
@@ -237,6 +246,8 @@ namespace PigeonHunt
         private int stateResetSourceState = int.MinValue;
         private bool lmaoResetPausePending;
         private bool movementResetOnComplete;
+        private bool useVRCDogForNextMissLmao;
+        private bool useVRCDogForNextEndRoundLmao;
         private Canvas dogMainCanvas;
         private GameObject activeGotOneObject;
         private GameObject activeGotTwoObject;
@@ -313,6 +324,12 @@ namespace PigeonHunt
 
         public void PlayHitAnimation(float posX)
         {
+            var fallbackPosition = got != null ? got.transform.position : transform.position;
+            PlayHitAnimationAtWorldPosition(new Vector3(posX, fallbackPosition.y, fallbackPosition.z));
+        }
+
+        public void PlayHitAnimationAtWorldPosition(Vector3 worldHitPosition)
+        {
             if (got == null)
             {
                 RequestMovement(DogMovementType.Hit);
@@ -320,7 +337,7 @@ namespace PigeonHunt
             }
 
             var currentLocal = got.transform.localPosition;
-            var localX = ResolveHitLocalX(posX);
+            var localX = ResolveHitLocalX(worldHitPosition);
             var clampedLocalX = ClampHitLocalXWithPadding(localX);
             got.transform.localPosition = new Vector3(clampedLocalX, currentLocal.y, currentLocal.z);
 
@@ -370,16 +387,14 @@ namespace PigeonHunt
             activeGotTwoObject = null;
         }
 
-        private float ResolveHitLocalX(float worldX)
+        private float ResolveHitLocalX(Vector3 worldPosition)
         {
             if (got == null)
             {
-                return worldX;
+                return worldPosition.x;
             }
 
             var targetTransform = got.transform;
-            var worldPosition = targetTransform.position;
-            worldPosition.x = worldX;
 
             if (targetTransform.parent == null)
             {
@@ -464,6 +479,21 @@ namespace PigeonHunt
             RequestMovement(DogMovementType.EndRound);
         }
 
+        public float LmfaoVRCDogChance
+        {
+            get { return Mathf.Clamp01(lmfaoVRCDogChance); }
+        }
+
+        public void SetUseVRCDogForNextEndRoundLmao(bool useVRCDog)
+        {
+            useVRCDogForNextEndRoundLmao = useVRCDog && lmfao_VRCDog != null;
+        }
+
+        public void SetUseVRCDogForNextMissLmao(bool useVRCDog)
+        {
+            useVRCDogForNextMissLmao = useVRCDog && lmfao_VRCDog != null;
+        }
+
         public void ResetToIdle()
         {
             stateResetPending = false;
@@ -472,6 +502,8 @@ namespace PigeonHunt
             StopMovement(true);
             HideGotOneObjects();
             HideGotTwoObjects();
+            SetOptionalObjectActive(lmfao_VRCDog, false);
+            RestLayerOrder();
             ApplyState(idleState);
         }
 
@@ -556,6 +588,7 @@ namespace PigeonHunt
                 return;
             }
 
+            SetOptionalObjectActive(roundStart, true);
             roundStartMovementActive = true;
             roundStartMovementPhase = RoundStartPhaseFirstMove;
             roundStartMovementPhaseTimer = Mathf.Max(0f, roundStartMoveDuration);
@@ -579,6 +612,7 @@ namespace PigeonHunt
             }
 
             ApplyState(roundNextState);
+            SetOptionalObjectActive(roundNext, true);
 
             roundNextMovementTarget = roundNext.transform;
             if (roundNextMovementTarget == null)
@@ -621,9 +655,19 @@ namespace PigeonHunt
             }
 
             StopMovement(false);
+            PrepareEndRoundLmaoObjects(type, target);
 
             activeMovementType = type;
             movementTarget = target;
+            if (type == DogMovementType.EndRound)
+            {
+                useVRCDogForNextEndRoundLmao = false;
+            }
+            else if (type == DogMovementType.Miss)
+            {
+                useVRCDogForNextMissLmao = false;
+            }
+
             movementBasePosition = target.position;
             movementVerticalOffset = 0f;
             movementResetOnComplete = type == DogMovementType.EndRound;
@@ -939,7 +983,7 @@ namespace PigeonHunt
             }
 
             movementVerticalOffset += delta;
-            movementTarget.position = movementBasePosition + Vector3.up * movementVerticalOffset;
+            movementTarget.position = movementBasePosition + GetMovementUpAxis() * movementVerticalOffset;
         }
 
         private void CompleteMovement()
@@ -975,6 +1019,26 @@ namespace PigeonHunt
                 HideGotOneObjects();
                 HideGotTwoObjects();
             }
+            else if (completedType == DogMovementType.EndRound)
+            {
+                SetOptionalObjectActive(lmfao_VRCDog, false);
+            }
+            else if (completedType == DogMovementType.Miss)
+            {
+                SetOptionalObjectActive(lmfao_VRCDog, false);
+            }
+        }
+
+        private void PrepareEndRoundLmaoObjects(DogMovementType type, Transform target)
+        {
+            if (type != DogMovementType.Miss && type != DogMovementType.EndRound)
+            {
+                return;
+            }
+
+            var useVRCDog = lmfao_VRCDog != null && target == lmfao_VRCDog.transform;
+            SetOptionalObjectActive(lmfao, !useVRCDog);
+            SetOptionalObjectActive(lmfao_VRCDog, useVRCDog);
         }
 
         private GameObject GetGotTwoObject(PigeonColorType firstColorType, PigeonColorType secondColorType)
@@ -1068,6 +1132,7 @@ namespace PigeonHunt
                 else
                 {
                     ResetRoundStartTarget();
+                    RestLayerOrder();
                     roundStartMovementActive = false;
                     roundStartMovementPhase = RoundStartPhaseComplete;
                     roundStartMovementTarget = null;
@@ -1116,7 +1181,7 @@ namespace PigeonHunt
                 return;
             }
 
-            roundStartMovementTarget.Translate(Vector3.right * distance, Space.World);
+            roundStartMovementTarget.position += GetMovementRightAxis() * distance;
         }
 
         private void MoveRoundStartArc(float deltaTime)
@@ -1133,7 +1198,8 @@ namespace PigeonHunt
                 roundStartArcVerticalDistance,
                 roundStartArcExtraDropDistance,
                 referenceWidth,
-                ref roundStartArcBasePosition);
+                ref roundStartArcBasePosition,
+                roundStart);
         }
 
         private void BeginRoundStartArcPhase()
@@ -1219,6 +1285,7 @@ namespace PigeonHunt
                 else
                 {
                     ResetRoundNextTarget();
+                    RestLayerOrder();
                     roundNextMovementActive = false;
                     roundNextMovementPhase = RoundNextPhaseComplete;
                     roundNextMovementTarget = null;
@@ -1267,7 +1334,7 @@ namespace PigeonHunt
                 return;
             }
 
-            roundNextMovementTarget.Translate(Vector3.right * distance, Space.World);
+            roundNextMovementTarget.position += GetMovementRightAxis() * distance;
         }
 
         private void MoveRoundNextArc(float deltaTime)
@@ -1284,7 +1351,8 @@ namespace PigeonHunt
                 roundStartArcVerticalDistance,
                 roundStartArcExtraDropDistance,
                 referenceWidth,
-                ref roundNextArcBasePosition);
+                ref roundNextArcBasePosition,
+                roundNext);
         }
 
         private void BeginRoundNextArcPhase()
@@ -1311,13 +1379,15 @@ namespace PigeonHunt
             float verticalDistanceNormalized,
             float extraDropDistanceNormalized,
             float referenceWidth,
-            ref Vector3 basePosition)
+            ref Vector3 basePosition,
+            GameObject hideTarget)
         {
             if (target == null)
             {
                 return;
             }
 
+            elapsed += deltaTime;
             var safeDuration = Mathf.Max(0.0001f, duration);
             var safeSpeed = Mathf.Max(0f, arcSpeed);
             if (safeSpeed <= 0f)
@@ -1334,17 +1404,16 @@ namespace PigeonHunt
             var verticalDistance = Mathf.Max(0f, verticalDistanceNormalized) * referenceWidth;
             var extraDropDistance = Mathf.Max(0f, extraDropDistanceNormalized) * referenceWidth;
 
-            elapsed += deltaTime;
-            var layerChangedTime = Mathf.Max(0f, ArcLayerChangedTime);
-            if (!layerChanged && elapsed >= layerChangedTime)
+            var normalizedTime = Mathf.Clamp01((elapsed * safeSpeed) / safeDuration);
+            if (!layerChanged && normalizedTime >= 0.5f)
             {
                 layerChanged = true;
-                SetDogSortingOrder(2);
+                SetDogSortingOrder(DogSortingOrderBack);
             }
 
-            var normalizedTime = Mathf.Clamp01((elapsed * safeSpeed) / safeDuration);
+            HideDogAfterArcPeakIfNeeded(hideTarget, normalizedTime, safeDuration, safeSpeed);
 
-            var offset = Vector3.right * (horizontalDistance * normalizedTime);
+            var offset = GetMovementRightAxis() * (horizontalDistance * normalizedTime);
             var arcHeight = Mathf.Sin(normalizedTime * Mathf.PI) * verticalDistance;
             if (extraDropDistance > 0f && normalizedTime >= 0.5f)
             {
@@ -1352,8 +1421,38 @@ namespace PigeonHunt
                 arcHeight -= extraDropDistance * Mathf.Clamp01(dropT);
             }
 
-            offset += Vector3.up * arcHeight;
+            offset += GetMovementUpAxis() * arcHeight;
             target.position = basePosition + offset;
+        }
+
+        private void HideDogAfterArcPeakIfNeeded(GameObject target, float normalizedTime, float safeDuration, float safeSpeed)
+        {
+            if (!hideDogAfterArcPeak || target == null || !target.activeSelf)
+            {
+                return;
+            }
+
+            var delay = Mathf.Max(0f, hideDogAfterArcPeakDelay);
+            var peakNormalizedTime = 0.5f;
+            var hideNormalizedTime = Mathf.Clamp01(peakNormalizedTime + ((delay * safeSpeed) / safeDuration));
+            if (normalizedTime >= hideNormalizedTime)
+            {
+                target.SetActive(false);
+            }
+        }
+
+        private Vector3 GetMovementRightAxis()
+        {
+            var area = movementArea != null ? movementArea.transform : transform;
+            var axis = area != null ? area.right : Vector3.right;
+            return axis.sqrMagnitude > 0.0001f ? axis.normalized : Vector3.right;
+        }
+
+        private Vector3 GetMovementUpAxis()
+        {
+            var area = movementArea != null ? movementArea.transform : transform;
+            var axis = area != null ? area.up : Vector3.up;
+            return axis.sqrMagnitude > 0.0001f ? axis.normalized : Vector3.up;
         }
 
         private void ResetRoundNextTarget()
@@ -1363,6 +1462,7 @@ namespace PigeonHunt
                 return;
             }
 
+            SetOptionalObjectActive(roundNext, true);
             roundNextMovementTarget.localPosition = Vector3.zero;
         }
 
@@ -1446,6 +1546,16 @@ namespace PigeonHunt
 
             if (type == DogMovementType.Miss || type == DogMovementType.EndRound)
             {
+                if (type == DogMovementType.Miss && useVRCDogForNextMissLmao && lmfao_VRCDog != null)
+                {
+                    return lmfao_VRCDog.transform;
+                }
+
+                if (type == DogMovementType.EndRound && useVRCDogForNextEndRoundLmao && lmfao_VRCDog != null)
+                {
+                    return lmfao_VRCDog.transform;
+                }
+
                 return lmfao != null ? lmfao.transform : GetTransformForState(missState);
             }
 
@@ -1634,23 +1744,48 @@ namespace PigeonHunt
                 return;
             }
 
+            SetOptionalObjectActive(roundStart, true);
             roundStartMovementTarget.localPosition = Vector3.zero;
         }
 
         public void RestLayerOrder()
         {
-            SetDogSortingOrder(3);
+            SetDogSortingOrder(DogSortingOrderFront);
         }
 
         private void SetDogSortingOrder(int sortingOrder)
         {
             var canvas = GetDogMainCanvas();
+            ApplyCanvasSortingOrder(canvas, sortingOrder);
+            ApplyCanvasSortingOrder(GetCanvasFromTransform(roundStartMovementTarget), sortingOrder);
+            ApplyCanvasSortingOrder(GetCanvasFromTransform(roundNextMovementTarget), sortingOrder);
+        }
+
+        private void ApplyCanvasSortingOrder(Canvas canvas, int sortingOrder)
+        {
             if (canvas == null)
             {
                 return;
             }
 
+            canvas.overrideSorting = true;
             canvas.sortingOrder = sortingOrder;
+        }
+
+        private Canvas GetCanvasFromTransform(Transform target)
+        {
+            if (target == null)
+            {
+                return null;
+            }
+
+            var canvas = target.GetComponent<Canvas>();
+            if (canvas == null)
+            {
+                canvas = target.GetComponentInChildren<Canvas>(true);
+            }
+
+            return canvas;
         }
 
         private Canvas GetDogMainCanvas()

@@ -40,6 +40,8 @@ namespace PigeonHunt
         [FormerlySerializedAs("hitFallDelay")]
         [SerializeField] private float hitHoldDuration = 0.35f;
         [SerializeField] private float shotDownDuration = 2.0f;
+        [Min(0f)]
+        [SerializeField] private float shotDownFallSpeedMultiplier = 2.0f;
 
         [Header("Escape Behaviour")]
         [SerializeField] private float escapeTriggerTime = 6f;
@@ -70,7 +72,7 @@ namespace PigeonHunt
         [Header("Debug")]
         [SerializeField] private bool logDirectionChanges;
 
-        private Vector3[] canvasCorners = new Vector3[4];
+        private bool useLocalAreaSpace;
 
         private const int EdgeNone = 0;
         private const int EdgeX = 1;
@@ -120,11 +122,21 @@ namespace PigeonHunt
         private int currentFlightDirection = -1;
         private bool exitActive;
         private bool exitNotifiedToManager;
+        private bool deterministicRandomActive;
+        private int deterministicRoundSeed;
+        private int deterministicSpawnIndex;
+        private int deterministicPoolIndex;
+        private int deterministicReflectionCount;
+        private int deterministicShotRandomizeCount;
 
         public bool IsAvailable => !isActive && !isDespawning;
         public bool OccupiesSlot => isActive || isDespawning;
         public bool CanApplySyncedHit => isActive && !isDespawning && !hasBeenHit;
         public PigeonColorType ColorType => pigeonColorType;
+        public bool BelongsTo(GameManager manager)
+        {
+            return gameManager == manager;
+        }
 
         private void Awake()
         {
@@ -212,6 +224,7 @@ namespace PigeonHunt
 
         public void BeginFlight(Vector3 startPosition, int directionIndex, float lifetimeSeconds, float difficultyMultiplier, float escapeTriggerReduction, float minimumEscapeTriggerTime)
         {
+            ClearDeterministicRandomContext();
             RefreshMovementBounds();
 
             CacheColliderExtents();
@@ -245,8 +258,8 @@ namespace PigeonHunt
             isShotDown = false;
             shotDownTimer = 0f;
 
-            position = ClampInsideBounds(startPosition);
-            transform.position = position;
+            position = ClampInsideBounds(WorldToMovementSpace(startPosition));
+            transform.position = MovementToWorldSpace(position);
 
             if (!gameObject.activeSelf)
             {
@@ -269,6 +282,26 @@ namespace PigeonHunt
             QychuiUtilities.SetColliderEnabled(hitCollider, true);
 
             UpdateFlightAudioState();
+        }
+
+        public void SetDeterministicRandomContext(int roundSeed, int spawnIndex, int poolIndex)
+        {
+            deterministicRandomActive = roundSeed != 0;
+            deterministicRoundSeed = roundSeed;
+            deterministicSpawnIndex = spawnIndex;
+            deterministicPoolIndex = poolIndex;
+            deterministicReflectionCount = 0;
+            deterministicShotRandomizeCount = 0;
+        }
+
+        private void ClearDeterministicRandomContext()
+        {
+            deterministicRandomActive = false;
+            deterministicRoundSeed = 0;
+            deterministicSpawnIndex = 0;
+            deterministicPoolIndex = 0;
+            deterministicReflectionCount = 0;
+            deterministicShotRandomizeCount = 0;
         }
 
         public void BeginExitFlight()
@@ -339,8 +372,8 @@ namespace PigeonHunt
             exitActive = true;
             exitNotifiedToManager = true;
 
-            position = ClampInsideBounds(transform.position);
-            transform.position = position;
+            position = ClampInsideBounds(WorldToMovementSpace(transform.position));
+            transform.position = MovementToWorldSpace(position);
 
             if (!gameObject.activeSelf)
             {
@@ -418,9 +451,9 @@ namespace PigeonHunt
 
             if (snapToHitPoint)
             {
-                var hitPosition = new Vector3(hitPoint.x, hitPoint.y, planeZ);
+                var hitPosition = WorldToMovementSpace(hitPoint);
                 position = ClampInsideBounds(hitPosition);
-                transform.position = position;
+                transform.position = MovementToWorldSpace(position);
             }
 
             direction = Vector3.zero;
@@ -474,9 +507,8 @@ namespace PigeonHunt
                 return;
             }
 
-            particle.transform.position = new Vector3(hitPoint.x, hitPoint.y, planeZ);
-            var normal = QychuiUtilities.GetSafeNormal(hitNormal, -transform.forward);
-            particle.transform.rotation = Quaternion.LookRotation(normal);
+            var particlePosition = WorldToMovementSpace(hitPoint);
+            particle.transform.position = MovementToWorldSpace(particlePosition);
             QychuiUtilities.SafePlay(particle);
         }
 
@@ -546,7 +578,17 @@ namespace PigeonHunt
                 return false;
             }
 
-            var newDirectionIndex = SampleRandomFlightDirectionIndex();
+            int newDirectionIndex;
+            if (deterministicRandomActive)
+            {
+                newDirectionIndex = SampleDeterministicFlightDirectionIndex(deterministicShotRandomizeCount);
+                deterministicShotRandomizeCount++;
+            }
+            else
+            {
+                newDirectionIndex = SampleRandomFlightDirectionIndex();
+            }
+
             ApplyMovementDirection(GetDirectionVector(newDirectionIndex));
 
             return true;
@@ -840,9 +882,9 @@ namespace PigeonHunt
 
                 shotDownTimer -= deltaTime;
 
-                var fallSpeed = normalizedSpeedPerSecond * speedMultiplier * 2f; // Fall speed is twice the normal flight speed
+                var fallSpeed = GetWorldVerticalSpeed(normalizedSpeedPerSecond * speedMultiplier * shotDownFallSpeedMultiplier);
                 position.y -= fallSpeed * deltaTime;
-                transform.position = position;
+                transform.position = MovementToWorldSpace(position);
 
                 var hitBottom = HasHitBottom();
 
@@ -917,7 +959,7 @@ namespace PigeonHunt
             if (escapeActive)
             {
                 position = nextPosition;
-                transform.position = position;
+                transform.position = MovementToWorldSpace(position);
 
                 if (escapeDespawnDelay <= 0f)
                 {
@@ -940,7 +982,7 @@ namespace PigeonHunt
             {
                 position = nextPosition;
                 position.z = planeZ;
-                transform.position = position;
+                transform.position = MovementToWorldSpace(position);
 
                 if (IsOutsideRecycleBounds(position))
                 {
@@ -963,12 +1005,12 @@ namespace PigeonHunt
 
                 ReflectDirection(edgeHit);
                 position = clampedPosition;
-                transform.position = position;
+                transform.position = MovementToWorldSpace(position);
                 return;
             }
 
             position = clampedPosition;
-            transform.position = position;
+            transform.position = MovementToWorldSpace(position);
         }
 
         private void TickExitMovement(float deltaTime)
@@ -985,13 +1027,18 @@ namespace PigeonHunt
             var normalizedStep = Mathf.Max(0f, normalizedSpeedPerSecond) * deltaTime;
             position.y += normalizedStep / directionScale;
             position.z = planeZ;
-            transform.position = position;
+            transform.position = MovementToWorldSpace(position);
 
             if (position.y > maxY + colliderExtents.y)
             {
                 exitActive = false;
                 BeginExpirySequence(position, false);
             }
+        }
+
+        private float GetWorldVerticalSpeed(float normalizedSpeed)
+        {
+            return Mathf.Max(0f, normalizedSpeed) * Mathf.Max(0.0001f, areaSize.y);
         }
 
         private void TickDespawn(float deltaTime)
@@ -1036,7 +1083,7 @@ namespace PigeonHunt
 
             position = stopPosition;
             position.z = planeZ;
-            transform.position = position;
+            transform.position = MovementToWorldSpace(position);
 
             StopFlightAudio();
 
@@ -1113,7 +1160,7 @@ namespace PigeonHunt
             escapeArmed = false;
             escapeTimer = Mathf.Max(0f, escapeDespawnDelay);
             position = initialPosition;
-            transform.position = position;
+            transform.position = MovementToWorldSpace(position);
 
             if (escapeDespawnDelay <= 0f)
             {
@@ -1160,15 +1207,22 @@ namespace PigeonHunt
         {
             var deflectionChance = gameManager != null ? gameManager.CurrentPigeonBoundaryRandomDeflectionChance : 0f;
             var deflectionAngle = Mathf.Max(0f, boundaryRandomDeflectionAngle);
+            var reflectionIndex = deterministicReflectionCount++;
 
             if (deflectionChance <= 0f ||
-                deflectionAngle <= 0f ||
-                Random.value > deflectionChance)
+                deflectionAngle <= 0f)
             {
                 return reflected;
             }
 
-            var angleOffset = Random.Range(-deflectionAngle, deflectionAngle);
+            var chanceRoll = deterministicRandomActive ? GetDeterministic01(101, reflectionIndex) : Random.value;
+            if (chanceRoll > deflectionChance)
+            {
+                return reflected;
+            }
+
+            var angleRoll = deterministicRandomActive ? GetDeterministic01(102, reflectionIndex) : Random.value;
+            var angleOffset = Mathf.Lerp(-deflectionAngle, deflectionAngle, angleRoll);
             var rotated = Quaternion.Euler(0f, 0f, angleOffset) * reflected;
             rotated.z = 0f;
 
@@ -1310,6 +1364,7 @@ namespace PigeonHunt
             if (playArea == null)
             {
                 var current = transform.position;
+                useLocalAreaSpace = false;
 
                 minX = current.x - 5f;
                 maxX = current.x + 5f;
@@ -1324,17 +1379,14 @@ namespace PigeonHunt
                 return;
             }
 
-            if (!QychuiUtilities.TryGetRectWorldBounds(playArea, canvasCorners, out float boundsMinX, out float boundsMaxX, out float boundsMinY, out float boundsMaxY, out float boundsPlaneZ))
-            {
-                return;
-            }
+            useLocalAreaSpace = true;
 
-            minX = boundsMinX;
-            maxX = boundsMaxX;
-            minY = boundsMinY;
-            maxY = boundsMaxY;
-
-            planeZ = boundsPlaneZ;
+            var rect = playArea.rect;
+            minX = rect.xMin;
+            maxX = rect.xMax;
+            minY = rect.yMin;
+            maxY = rect.yMax;
+            planeZ = 0f;
 
             areaSize.x = Mathf.Max(0.0001f, maxX - minX);
             areaSize.y = Mathf.Max(0.0001f, maxY - minY);
@@ -1348,25 +1400,7 @@ namespace PigeonHunt
 
             if (hitCollider != null)
             {
-                var localSize = hitCollider.size;
-                var lossyScale = hitCollider.transform.lossyScale;
-                computed.x = Mathf.Abs(localSize.x * lossyScale.x) * 0.5f;
-                computed.y = Mathf.Abs(localSize.y * lossyScale.y) * 0.5f;
-
-                if (hitCollider.gameObject.activeInHierarchy)
-                {
-                    var bounds = hitCollider.bounds;
-
-                    if (bounds.extents.x > 0f)
-                    {
-                        computed.x = Mathf.Max(computed.x, bounds.extents.x);
-                    }
-
-                    if (bounds.extents.y > 0f)
-                    {
-                        computed.y = Mathf.Max(computed.y, bounds.extents.y);
-                    }
-                }
+                computed = GetColliderMovementExtents(hitCollider);
             }
 
             if (computed.x <= 0f)
@@ -1380,6 +1414,77 @@ namespace PigeonHunt
             }
 
             colliderExtents = computed;
+        }
+
+        private Vector2 GetColliderMovementExtents(BoxCollider collider)
+        {
+            if (collider == null)
+            {
+                return Vector2.zero;
+            }
+
+            var halfSize = collider.size * 0.5f;
+            var center = collider.center;
+            var min = WorldToMovementSpace(collider.transform.TransformPoint(center + new Vector3(-halfSize.x, -halfSize.y, -halfSize.z)));
+            var max = min;
+
+            AccumulateColliderCorner(collider, center + new Vector3(-halfSize.x, -halfSize.y, halfSize.z), ref min, ref max);
+            AccumulateColliderCorner(collider, center + new Vector3(-halfSize.x, halfSize.y, -halfSize.z), ref min, ref max);
+            AccumulateColliderCorner(collider, center + new Vector3(-halfSize.x, halfSize.y, halfSize.z), ref min, ref max);
+            AccumulateColliderCorner(collider, center + new Vector3(halfSize.x, -halfSize.y, -halfSize.z), ref min, ref max);
+            AccumulateColliderCorner(collider, center + new Vector3(halfSize.x, -halfSize.y, halfSize.z), ref min, ref max);
+            AccumulateColliderCorner(collider, center + new Vector3(halfSize.x, halfSize.y, -halfSize.z), ref min, ref max);
+            AccumulateColliderCorner(collider, center + new Vector3(halfSize.x, halfSize.y, halfSize.z), ref min, ref max);
+
+            return new Vector2(
+                Mathf.Max(0f, (max.x - min.x) * 0.5f),
+                Mathf.Max(0f, (max.y - min.y) * 0.5f));
+        }
+
+        private void AccumulateColliderCorner(BoxCollider collider, Vector3 localCorner, ref Vector3 min, ref Vector3 max)
+        {
+            var point = WorldToMovementSpace(collider.transform.TransformPoint(localCorner));
+            if (point.x < min.x)
+            {
+                min.x = point.x;
+            }
+
+            if (point.x > max.x)
+            {
+                max.x = point.x;
+            }
+
+            if (point.y < min.y)
+            {
+                min.y = point.y;
+            }
+
+            if (point.y > max.y)
+            {
+                max.y = point.y;
+            }
+        }
+
+        private Vector3 WorldToMovementSpace(Vector3 worldPosition)
+        {
+            if (!useLocalAreaSpace || playArea == null)
+            {
+                return worldPosition;
+            }
+
+            var local = playArea.InverseTransformPoint(worldPosition);
+            return new Vector3(local.x, local.y, 0f);
+        }
+
+        private Vector3 MovementToWorldSpace(Vector3 localPosition)
+        {
+            if (!useLocalAreaSpace || playArea == null)
+            {
+                localPosition.z = planeZ;
+                return localPosition;
+            }
+
+            return playArea.TransformPoint(new Vector3(localPosition.x, localPosition.y, 0f));
         }
 
         private void UpdateFlightAudioState()
@@ -1451,6 +1556,23 @@ namespace PigeonHunt
             return candidate;
         }
 
+        private int SampleDeterministicFlightDirectionIndex(int randomizeIndex)
+        {
+            var currentDirection = GetDiagonalDirectionIndex(direction);
+            var candidate = SampleDeterministicDiagonalDirection(randomizeIndex, 201);
+
+            if (currentDirection == candidate)
+            {
+                candidate = SampleDeterministicDiagonalDirection(randomizeIndex, 202);
+                if (currentDirection == candidate)
+                {
+                    candidate = GetNextDiagonalDirection(currentDirection);
+                }
+            }
+
+            return candidate;
+        }
+
         private int SampleRandomDiagonalDirection()
         {
             var roll = Random.Range(0, 4);
@@ -1470,6 +1592,70 @@ namespace PigeonHunt
             }
 
             return FlightLeftDown;
+        }
+
+        private int SampleDeterministicDiagonalDirection(int randomizeIndex, int salt)
+        {
+            var roll = GetDeterministicValue(salt, randomizeIndex) & 3;
+            if (roll == 0)
+            {
+                return FlightRightUp;
+            }
+
+            if (roll == 1)
+            {
+                return FlightRightDown;
+            }
+
+            if (roll == 2)
+            {
+                return FlightLeftUp;
+            }
+
+            return FlightLeftDown;
+        }
+
+        private int GetNextDiagonalDirection(int currentDirection)
+        {
+            if (currentDirection == FlightRightUp)
+            {
+                return FlightRightDown;
+            }
+
+            if (currentDirection == FlightRightDown)
+            {
+                return FlightLeftUp;
+            }
+
+            if (currentDirection == FlightLeftUp)
+            {
+                return FlightLeftDown;
+            }
+
+            return FlightRightUp;
+        }
+
+        private float GetDeterministic01(int salt, int eventIndex)
+        {
+            var value = GetDeterministicValue(salt, eventIndex) & 0x7fffffff;
+            return value / 2147483647f;
+        }
+
+        private int GetDeterministicValue(int salt, int eventIndex)
+        {
+            var value = Mathf.Abs(deterministicRoundSeed);
+            value = MixDeterministicValue(value, deterministicSpawnIndex);
+            value = MixDeterministicValue(value, deterministicPoolIndex);
+            value = MixDeterministicValue(value, eventIndex);
+            value = MixDeterministicValue(value, salt);
+            return value;
+        }
+
+        private int MixDeterministicValue(int value, int salt)
+        {
+            var mixed = Mathf.Abs(value + 31 * (salt + 1));
+            mixed = (mixed * 1103515245 + 12345) & 0x7fffffff;
+            return mixed;
         }
 
         private int GetDiagonalDirectionIndex(Vector3 targetDirection)

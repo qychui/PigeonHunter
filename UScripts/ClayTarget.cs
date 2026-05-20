@@ -33,6 +33,7 @@ namespace PigeonHunt
 
         private Vector3 startPosition;
         private Vector3 endPosition;
+        private Transform movementSpace;
         private float hideHeightY;
         private float peakHeight;
         private float duration;
@@ -49,6 +50,10 @@ namespace PigeonHunt
 
         public bool IsAvailable => !isActive;
         public bool CanApplySyncedHit => isActive && !hasResolved && !isHitStateActive;
+        public bool BelongsTo(GameManager manager)
+        {
+            return gameManager == manager;
+        }
 
         private void Awake()
         {
@@ -86,7 +91,7 @@ namespace PigeonHunt
             var position = Vector3.Lerp(startPosition, endPosition, t);
             var jumpOffsetY = peakHeight * 4f * t * (1f - t);
             position.y += jumpOffsetY;
-            transform.position = position;
+            transform.position = MovementToWorldSpace(position);
 
             UpdateVisual();
 
@@ -120,6 +125,33 @@ namespace PigeonHunt
             float lifetimeSeconds,
             float targetRecycleDelayAfterHide)
         {
+            BeginFlightInternal(spawnPosition, targetEndPosition, targetHideHeightY, targetDuration, targetPeakHeight, lifetimeSeconds, targetRecycleDelayAfterHide, null);
+        }
+
+        public void BeginFlightInSpace(
+            Vector3 spawnPosition,
+            Vector3 targetEndPosition,
+            float targetHideHeightY,
+            float targetDuration,
+            float targetPeakHeight,
+            float lifetimeSeconds,
+            float targetRecycleDelayAfterHide,
+            Transform targetMovementSpace)
+        {
+            BeginFlightInternal(spawnPosition, targetEndPosition, targetHideHeightY, targetDuration, targetPeakHeight, lifetimeSeconds, targetRecycleDelayAfterHide, targetMovementSpace);
+        }
+
+        private void BeginFlightInternal(
+            Vector3 spawnPosition,
+            Vector3 targetEndPosition,
+            float targetHideHeightY,
+            float targetDuration,
+            float targetPeakHeight,
+            float lifetimeSeconds,
+            float targetRecycleDelayAfterHide,
+            Transform targetMovementSpace)
+        {
+            movementSpace = targetMovementSpace;
             startPosition = spawnPosition;
             endPosition = targetEndPosition;
             hideHeightY = targetHideHeightY;
@@ -135,13 +167,23 @@ namespace PigeonHunt
             visualsHidden = false;
             isHitStateActive = false;
 
-            transform.position = startPosition;
+            transform.position = MovementToWorldSpace(startPosition);
             UpdateVisual();
 
             if (!gameObject.activeSelf)
             {
                 gameObject.SetActive(true);
             }
+        }
+
+        private Vector3 MovementToWorldSpace(Vector3 localPosition)
+        {
+            if (movementSpace == null)
+            {
+                return localPosition;
+            }
+
+            return movementSpace.TransformPoint(localPosition);
         }
 
         public void OnShot(Vector3 hitPoint, Vector3 hitNormal)
@@ -382,8 +424,6 @@ namespace PigeonHunt
 
             var particleTransform = particle.transform;
             particleTransform.position = hitPoint;
-            var normal = QychuiUtilities.GetSafeNormal(hitNormal, -transform.forward);
-            particleTransform.rotation = Quaternion.LookRotation(normal);
             QychuiUtilities.SafePlay(particle);
         }
 

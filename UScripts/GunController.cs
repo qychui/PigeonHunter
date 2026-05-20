@@ -6,6 +6,7 @@ using VRC.Udon.Common.Interfaces;
 
 namespace PigeonHunt
 {
+    [UdonBehaviourSyncMode(BehaviourSyncMode.Continuous)]
     public class GunController : UdonSharpBehaviour
     {
         private const int LaserDisplayOff = 0;
@@ -24,7 +25,9 @@ namespace PigeonHunt
         public float laserDistance = 100f;
         public bool enableLaser;
         public float doubleClickThreshold = 0.2f;
+        [UdonSynced]
         [Range(0, 2)] public int laserDisplayMode = LaserDisplayOff;
+        [UdonSynced] private bool syncedLaserHeld;
         public float laserHitDotSurfaceOffset = 0.005f;
 
         [Header("Game State")]
@@ -43,17 +46,22 @@ namespace PigeonHunt
                 laserDisplayMode = LaserDisplayLineAndDot;
             }
 
-            SyncLaserState();
+            ApplyLaserDisplayMode(laserDisplayMode);
         }
 
         private void Update()
         {
-            if (IsLaserDisplayActive())
+            if (ShouldRunLaser())
             {
                 FireLaser();
             }
             else
             {
+                if (laserLine != null && laserLine.enabled)
+                {
+                    laserLine.enabled = false;
+                }
+
                 HideLaserDot();
             }
         }
@@ -106,6 +114,7 @@ namespace PigeonHunt
             if (gameManager != null)
             {
                 gameManager.TransferGameplayOwnershipToLocalPlayer(gameObject);
+                SetLaserHeldState(true);
                 return;
             }
 
@@ -113,21 +122,52 @@ namespace PigeonHunt
             {
                 Networking.SetOwner(Networking.LocalPlayer, gameObject);
             }
+
+            SetLaserHeldState(true);
+        }
+
+        public override void OnDrop()
+        {
+            SetLaserHeldState(false);
         }
 
         private void CycleLaserDisplayMode()
         {
-            laserDisplayMode++;
-            if (laserDisplayMode > LaserDisplayDotOnly)
+            var nextMode = laserDisplayMode + 1;
+            if (nextMode > LaserDisplayDotOnly)
             {
-                laserDisplayMode = LaserDisplayOff;
+                nextMode = LaserDisplayOff;
             }
 
-            SyncLaserState();
+            SetLaserDisplayMode(nextMode);
         }
 
-        private void SyncLaserState()
+        private void SetLaserDisplayMode(int mode)
         {
+            if (Networking.LocalPlayer != null && !Networking.IsOwner(gameObject))
+            {
+                Networking.SetOwner(Networking.LocalPlayer, gameObject);
+            }
+
+            ApplyLaserDisplayMode(mode);
+            RequestSerialization();
+            SendCustomNetworkEvent(NetworkEventTarget.Others, nameof(NetworkApplyLaserDisplayMode), laserDisplayMode);
+        }
+
+        [NetworkCallable]
+        public void NetworkApplyLaserDisplayMode(int mode)
+        {
+            ApplyLaserDisplayMode(mode);
+        }
+
+        public override void OnDeserialization()
+        {
+            ApplyLaserDisplayMode(laserDisplayMode);
+        }
+
+        private void ApplyLaserDisplayMode(int mode)
+        {
+            laserDisplayMode = Mathf.Clamp(mode, LaserDisplayOff, LaserDisplayDotOnly);
             enableLaser = IsLaserDisplayActive();
 
             if (laserLine != null)
@@ -146,14 +186,34 @@ namespace PigeonHunt
             return laserDisplayMode != LaserDisplayOff;
         }
 
+        private bool ShouldRunLaser()
+        {
+            return syncedLaserHeld && IsLaserDisplayActive();
+        }
+
         private bool ShouldShowLaserLine()
         {
-            return laserDisplayMode == LaserDisplayLineAndDot;
+            return syncedLaserHeld && laserDisplayMode == LaserDisplayLineAndDot;
         }
 
         private bool ShouldShowLaserDot()
         {
-            return laserDisplayMode == LaserDisplayLineAndDot || laserDisplayMode == LaserDisplayDotOnly;
+            return syncedLaserHeld && (laserDisplayMode == LaserDisplayLineAndDot || laserDisplayMode == LaserDisplayDotOnly);
+        }
+
+        private void SetLaserHeldState(bool held)
+        {
+            syncedLaserHeld = held;
+            ApplyLaserDisplayMode(laserDisplayMode);
+            RequestSerialization();
+            SendCustomNetworkEvent(NetworkEventTarget.Others, nameof(NetworkApplyLaserHeldState), syncedLaserHeld);
+        }
+
+        [NetworkCallable]
+        public void NetworkApplyLaserHeldState(bool held)
+        {
+            syncedLaserHeld = held;
+            ApplyLaserDisplayMode(laserDisplayMode);
         }
 
         private void UpdateLaserDot(Vector3 hitPoint, Vector3 hitNormal)
@@ -243,6 +303,18 @@ namespace PigeonHunt
 
                 if (target != null)
                 {
+                    if (!target.BelongsTo(gameManager))
+                    {
+                        lastFireTime = currentTime;
+                        PlayShotEffects(false);
+                        if (gameManager != null)
+                        {
+                            gameManager.NotifyShotOutcome(false);
+                        }
+
+                        return true;
+                    }
+
                     hitPigeon = true;
                     var hitPoint = hitInfo.point;
                     var hitNormal = QychuiUtilities.GetSafeNormal(hitInfo.normal, -direction);
@@ -253,6 +325,18 @@ namespace PigeonHunt
                 }
                 else if (clayTarget != null)
                 {
+                    if (!clayTarget.BelongsTo(gameManager))
+                    {
+                        lastFireTime = currentTime;
+                        PlayShotEffects(false);
+                        if (gameManager != null)
+                        {
+                            gameManager.NotifyShotOutcome(false);
+                        }
+
+                        return true;
+                    }
+
                     hitPigeon = true;
                     hitClayTarget = true;
                     var hitPoint = hitInfo.point;
@@ -284,9 +368,16 @@ namespace PigeonHunt
             var shotAudio = useClayHitSfx ? clayHitSfx : shootSfx;
             var syncedAudio = false;
             var syncedParticle = false;
+            var syncedFlash = false;
 
             if (gameManager != null && gameManager.syncController != null)
             {
+                if (gameManager.syncController.HasGunShotFlash())
+                {
+                    gameManager.syncController.SyncGunShotFlash();
+                    syncedFlash = true;
+                }
+
                 if (gameManager.syncController.HasGunShotAudio())
                 {
                     gameManager.syncController.SyncGunShotAudio(useClayHitSfx);
@@ -298,6 +389,11 @@ namespace PigeonHunt
                     gameManager.syncController.SyncGunMuzzleFlash();
                     syncedParticle = true;
                 }
+            }
+
+            if (!syncedFlash && gameManager != null)
+            {
+                gameManager.SyncGunShotFlashObjects();
             }
 
             if (!syncedParticle)

@@ -19,3 +19,12 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+Model License
+"Duck Hunt Cartridge" (https://skfb.ly/6BAYI) by BIGDOGLOBAL is licensed under Creative Commons Attribution-NoDerivs (http://creativecommons.org/licenses/by-nd/4.0/).
+
+"NES Zapper" (https://skfb.ly/onJZv) by Thomas Fugier is licensed under Creative Commons Attribution (http://creativecommons.org/licenses/by/4.0/).
+
+"NES Console and Controller" (https://skfb.ly/onGrq) by Daz is licensed under Creative Commons Attribution (http://creativecommons.org/licenses/by/4.0/).
+
+"Retro TV set new, old, broken" (https://skfb.ly/o7uKC) by Bansheeva is licensed under Creative Commons Attribution (http://creativecommons.org/licenses/by/4.0/).

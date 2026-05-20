@@ -578,7 +578,7 @@ MonoBehaviour:
       Data: 30|UnityEngine.TooltipAttribute, UnityEngine.CoreModule
     - Name: tooltip
       Entry: 1
-      Data: "\u4E0D\u540C\u6B66\u5668\u7C7B\u578B\u7684\u56FE\u6807\uFF0C\u7D22\u5F15\u4E0EweaponType\u5BF9\u5E94\u3002"
+      Data: Icons for each weapon type. Indexes match weaponType values.
     - Name: 
       Entry: 8
       Data: 
@@ -635,7 +635,7 @@ MonoBehaviour:
       Data: 33|UnityEngine.TooltipAttribute, UnityEngine.CoreModule
     - Name: tooltip
       Entry: 1
-      Data: "\u5B50\u5F39\u663E\u793A\u7528\u7684\u56FE\u6807\uFF0C\u4ECE\u5DE6\u5230\u53F3\u4F9D\u6B21\u542F\u7528\u3002"
+      Data: Bullet display icons, enabled from left to right.
     - Name: 
       Entry: 8
       Data: 
@@ -749,7 +749,8 @@ MonoBehaviour:
       Data: 39|UnityEngine.TooltipAttribute, UnityEngine.CoreModule
     - Name: tooltip
       Entry: 1
-      Data: "\u8F6E\u6B21\u4E24\u4F4D\u6570\u663E\u793A\uFF0C\u6BCF\u4E2A\u5143\u7D20\u5BF9\u5E94\u4E00\u4F4D\uFF0C\u5BF9\u5E94\u7684\u6750\u8D28\u4F1A\u88AB\u5199\u5165_Index\u3002"
+      Data: Two-digit round display. Each element maps to one digit and writes into
+        the material _Index.
     - Name: 
       Entry: 8
       Data: 
@@ -863,7 +864,8 @@ MonoBehaviour:
       Data: 45|UnityEngine.TooltipAttribute, UnityEngine.CoreModule
     - Name: tooltip
       Entry: 1
-      Data: "\u6309\u987A\u5E8F\u914D\u7F6E\u4E94\u4E2A\u96BE\u5EA6\u7684\u663E\u793A\u5BF9\u8C61\uFF0C\u5F53\u524D\u96BE\u5EA6\u5BF9\u5E94\u7684\u5BF9\u8C61\u4F1A\u88AB\u70B9\u4EAE\u3002"
+      Data: Display objects for the five difficulty levels in order. The current
+        level is highlighted.
     - Name: 
       Entry: 8
       Data: 
@@ -920,7 +922,8 @@ MonoBehaviour:
       Data: 48|UnityEngine.TooltipAttribute, UnityEngine.CoreModule
     - Name: tooltip
       Entry: 1
-      Data: "\u5341\u53EA\u9E3D\u5B50\u51FB\u4E2D\u663E\u793A\u7684\u5BF9\u8C61\uFF0Ctrue\u4EE3\u8868\u8BE5\u53EA\u9E3D\u5B50\u88AB\u51FB\u843D\u3002"
+      Data: Hit indicator objects for ten pigeons. Active means the corresponding
+        pigeon was hit.
     - Name: 
       Entry: 8
       Data: 
@@ -977,7 +980,8 @@ MonoBehaviour:
       Data: 51|UnityEngine.TooltipAttribute, UnityEngine.CoreModule
     - Name: tooltip
       Entry: 1
-      Data: "\u5341\u53EA\u79FB\u52A8\u9776\u51FB\u4E2D\u663E\u793A\u7684\u5BF9\u8C61\uFF0Ctrue\u4EE3\u8868\u8BE5\u53EA\u79FB\u52A8\u9776\u88AB\u51FB\u843D\u3002"
+      Data: Hit indicator objects for ten clay targets. Active means the corresponding
+        target was hit.
     - Name: 
       Entry: 8
       Data: 
@@ -1049,7 +1053,7 @@ MonoBehaviour:
       Data: 56|UnityEngine.TooltipAttribute, UnityEngine.CoreModule
     - Name: tooltip
       Entry: 1
-      Data: "\u56DE\u5408\u7ED3\u7B97\u65F6\u547D\u4E2D\u6570\u52A8\u753B\u7684\u5EF6\u8FDF\u95F4\u9694\u3002"
+      Data: Delay interval for the hit-count animation during round settlement.
     - Name: 
       Entry: 8
       Data: 
@@ -1115,7 +1119,7 @@ MonoBehaviour:
       Data: 60|UnityEngine.TooltipAttribute, UnityEngine.CoreModule
     - Name: tooltip
       Entry: 1
-      Data: "\u5168\u547D\u4E2D\u52A8\u753B\u7684\u95EA\u70C1\u95F4\u9694\u3002"
+      Data: Blink interval for the perfect-hit animation.
     - Name: 
       Entry: 8
       Data: 
@@ -1181,7 +1185,8 @@ MonoBehaviour:
       Data: 64|UnityEngine.TooltipAttribute, UnityEngine.CoreModule
     - Name: tooltip
       Entry: 1
-      Data: "\u5168\u547D\u4E2D\u52A8\u753B\u7684\u95EA\u70C1\u8F6E\u6570\u3002\u6BCF\u8F6E\u5305\u542B\u5173\u95ED\u548C\u6253\u5F00\u4E00\u6B21\u3002"
+      Data: Number of blink cycles for the perfect-hit animation. Each cycle includes
+        one off and one on state.
     - Name: 
       Entry: 8
       Data: 
@@ -1244,7 +1249,7 @@ MonoBehaviour:
       Data: 68|UnityEngine.TooltipAttribute, UnityEngine.CoreModule
     - Name: tooltip
       Entry: 1
-      Data: "\u56DE\u5408\u7ED3\u7B97\u65F6\u547D\u4E2D\u6570\u52A8\u753B\u97F3\u6548\u3002"
+      Data: SFX played during the round-settlement hit-count animation.
     - Name: 
       Entry: 8
       Data: 
@@ -1313,7 +1318,7 @@ MonoBehaviour:
       Data: 73|UnityEngine.TooltipAttribute, UnityEngine.CoreModule
     - Name: tooltip
       Entry: 1
-      Data: "\u5168\u5C40\u97F3\u6548\u7BA1\u7406\u5668\u3002"
+      Data: Global sound manager.
     - Name: 
       Entry: 8
       Data: 
@@ -1370,7 +1375,7 @@ MonoBehaviour:
       Data: 76|UnityEngine.TooltipAttribute, UnityEngine.CoreModule
     - Name: tooltip
       Entry: 1
-      Data: "\u5341\u53EA\u9E3D\u5B50\u7684\u906E\u7F69\u5BF9\u8C61\uFF0C\u5BF9\u5E94\u51FA\u73B0\u7684\u9E3D\u5B50\u4F1A\u95EA\u70C1\u3002"
+      Data: Mask objects for ten pigeons. The mask for each spawned pigeon blinks.
     - Name: 
       Entry: 8
       Data: 
@@ -1637,7 +1642,7 @@ MonoBehaviour:
       Data: 89|UnityEngine.TooltipAttribute, UnityEngine.CoreModule
     - Name: tooltip
       Entry: 1
-      Data: "6\u4F4D\u6570\u7684\u5206\u6570\u663E\u793A\uFF0C\u6BCF\u4E2A\u5143\u7D20\u5BF9\u5E94\u4E00\u4E2A\u6750\u8D28\u5B9E\u4F8B\u3002"
+      Data: Six-digit score display. Each element maps to one material instance.
     - Name: 
       Entry: 8
       Data: 
@@ -1700,7 +1705,7 @@ MonoBehaviour:
       Data: 93|UnityEngine.TooltipAttribute, UnityEngine.CoreModule
     - Name: tooltip
       Entry: 1
-      Data: "ScoreShader\u7684_Index\u5C5E\u6027\u540D\uFF0C\u9A71\u52A8\u5177\u4F53\u6570\u5B57\u663E\u793A\u3002"
+      Data: ScoreShader _Index property name used to drive the displayed digit.
     - Name: 
       Entry: 8
       Data: 
