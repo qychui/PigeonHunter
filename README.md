@@ -1,5 +1,9 @@
 # PigeonHunter
 
+## Game Preview
+
+<video src="DuckHuntClip.mp4"></video>
+
 ## English
 
 ### Project Overview
