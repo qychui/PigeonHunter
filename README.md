@@ -2,7 +2,11 @@
 
 ## Game Preview
 
+https://x.com/qychui/status/2057009900312842413
+
 <video src="DuckHuntClip.mp4"></video>
+
+![DuckHunt](DuckHunt.gif)
 
 ## English
 
