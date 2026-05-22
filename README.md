@@ -6,6 +6,10 @@ https://x.com/qychui/status/2057009900312842413
 
 ![DuckHunt](DuckHunt.gif)
 
+![DuckHunt](DuckHunt2.gif)
+
+![DuckHunt](DuckHunt3.gif)
+
 ![ScenePreview](ScenePreview.png)
 
 ## English

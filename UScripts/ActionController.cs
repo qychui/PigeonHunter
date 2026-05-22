@@ -63,6 +63,11 @@ namespace PigeonHunt
         private bool pendingSyncedRoundPassed;
         private float pendingSyncedRoundResultTimer;
         private bool pendingSyncedRoundResultEscapeRequested;
+        private int appliedMode1RoundResultRound;
+        private int appliedMode1RoundResultScore;
+        private int appliedMode1RoundResultHitCount;
+        private bool appliedMode1RoundResultPassed;
+        private bool appliedMode1RoundResultActive;
         private bool lastResolutionHadAnimation;
         private bool lastResolutionWasHit;
         private PigeonTarget lastHitPigeon;
@@ -76,6 +81,7 @@ namespace PigeonHunt
         private int mode1LocalStartGateRoundNumber;
         private int mode1LocalStartGateSeed;
         private bool mode1LocalStartGateSent;
+        private bool ownerRoundResultSyncAttempted;
 
         private const int DirectionRight = 0;
         private const int DirectionRightUp = 1;
@@ -167,6 +173,8 @@ namespace PigeonHunt
 
             if (roundEndPending)
             {
+                EnsureMode1RoundResultSyncedIfOwner();
+
                 var isPerfectHit = targetQuotaThisRound > 0 && pigeonsHitThisRound >= targetQuotaThisRound;
                 var showGoodResult = roundEndPassed && !isPerfectHit;
 
@@ -502,6 +510,7 @@ namespace PigeonHunt
             roundEndLmaoAnimTimer = 0f;
             roundActive = false;
             roundEndPassed = DetermineRoundPass();
+            ownerRoundResultSyncAttempted = false;
             SyncMode1RoundResultIfOwner();
 
             if (manager.animationController != null && lastResolutionHadAnimation)
@@ -513,6 +522,11 @@ namespace PigeonHunt
         public void ApplySyncedMode1RoundResult(int roundNumber, int score, int hitCount, bool passed)
         {
             if (manager == null)
+            {
+                return;
+            }
+
+            if (IsDuplicateAppliedMode1RoundResult(roundNumber, score, hitCount, passed))
             {
                 return;
             }
@@ -552,6 +566,7 @@ namespace PigeonHunt
             pigeonsHitThisRound = Mathf.Clamp(hitCount, 0, targetQuotaThisRound);
             pigeonsResolvedThisRound = targetQuotaThisRound;
             roundEndPassed = passed;
+            MarkAppliedMode1RoundResult(roundNumber, score, hitCount, passed);
             PrepareSyncedRoundSettlementState(passed);
             roundEndAnimationTimer = 0f;
             DespawnAllPigeons();
@@ -644,8 +659,31 @@ namespace PigeonHunt
             pigeonsHitThisRound = Mathf.Clamp(pendingSyncedRoundHitCount, 0, targetQuotaThisRound);
             pigeonsResolvedThisRound = Mathf.Max(pigeonsResolvedThisRound, targetQuotaThisRound);
             roundEndPassed = pendingSyncedRoundPassed;
+            MarkAppliedMode1RoundResult(
+                pendingSyncedRoundNumber,
+                pendingSyncedRoundScore,
+                pendingSyncedRoundHitCount,
+                pendingSyncedRoundPassed);
 
             ApplySyncedRoundResultUi(pendingSyncedRoundScore, false);
+        }
+
+        private bool IsDuplicateAppliedMode1RoundResult(int roundNumber, int score, int hitCount, bool passed)
+        {
+            return appliedMode1RoundResultActive &&
+                   appliedMode1RoundResultRound == Mathf.Max(1, roundNumber) &&
+                   appliedMode1RoundResultScore == Mathf.Max(0, score) &&
+                   appliedMode1RoundResultHitCount == Mathf.Max(0, hitCount) &&
+                   appliedMode1RoundResultPassed == passed;
+        }
+
+        private void MarkAppliedMode1RoundResult(int roundNumber, int score, int hitCount, bool passed)
+        {
+            appliedMode1RoundResultActive = true;
+            appliedMode1RoundResultRound = Mathf.Max(1, roundNumber);
+            appliedMode1RoundResultScore = Mathf.Max(0, score);
+            appliedMode1RoundResultHitCount = Mathf.Max(0, hitCount);
+            appliedMode1RoundResultPassed = passed;
         }
 
         private void ApplySyncedRoundResultUi(int score, bool resetResultUi)
@@ -841,7 +879,26 @@ namespace PigeonHunt
             }
 
             var score = manager.uiController != null ? manager.uiController.scoreCurrent : 0;
-            manager.SyncMode1RoundResult(GetDisplayedRoundNumber(), score, pigeonsHitThisRound, roundEndPassed);
+            var roundNumber = GetDisplayedRoundNumber();
+            ownerRoundResultSyncAttempted = true;
+            manager.SyncMode1RoundResult(roundNumber, score, pigeonsHitThisRound, roundEndPassed);
+            MarkAppliedMode1RoundResult(roundNumber, score, pigeonsHitThisRound, roundEndPassed);
+        }
+
+        private void EnsureMode1RoundResultSyncedIfOwner()
+        {
+            if (ownerRoundResultSyncAttempted)
+            {
+                return;
+            }
+
+            if (!IsMode1SyncOwner())
+            {
+                return;
+            }
+
+            ownerRoundResultSyncAttempted = true;
+            SyncMode1RoundResultIfOwner();
         }
 
         private bool CanForceSettleRound()
@@ -1870,7 +1927,17 @@ namespace PigeonHunt
 
         private bool ShouldWaitForSyncedRoundPlan()
         {
-            return IsNetworkedPigeonModeWithSync() && !ShouldUseSyncedRoundPlan();
+            if (!IsNetworkedPigeonModeWithSync())
+            {
+                return false;
+            }
+
+            if (!ShouldUseSyncedRoundPlan() && IsMode1SyncOwner())
+            {
+                EnsureMode1RoundPlanForCurrentRound();
+            }
+
+            return !ShouldUseSyncedRoundPlan();
         }
 
         private bool ShouldWaitForSyncedOwnerStartGate()
@@ -2041,6 +2108,12 @@ namespace PigeonHunt
             mode1LocalStartGateRoundNumber = 0;
             mode1LocalStartGateSeed = 0;
             mode1LocalStartGateSent = false;
+            ownerRoundResultSyncAttempted = false;
+            appliedMode1RoundResultActive = false;
+            appliedMode1RoundResultRound = 0;
+            appliedMode1RoundResultScore = 0;
+            appliedMode1RoundResultHitCount = 0;
+            appliedMode1RoundResultPassed = false;
             roundEndPending = false;
             roundEndHitCountTriggered = false;
             roundEndAudioTriggered = false;
@@ -2072,6 +2145,12 @@ namespace PigeonHunt
             mode1LocalStartGateRoundNumber = 0;
             mode1LocalStartGateSeed = 0;
             mode1LocalStartGateSent = false;
+            ownerRoundResultSyncAttempted = false;
+            appliedMode1RoundResultActive = false;
+            appliedMode1RoundResultRound = 0;
+            appliedMode1RoundResultScore = 0;
+            appliedMode1RoundResultHitCount = 0;
+            appliedMode1RoundResultPassed = false;
             spawnTimer = 0f;
             pairWaveActive = false;
             pairWavePendingResolutions = 0;

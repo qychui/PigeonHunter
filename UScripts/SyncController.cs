@@ -139,6 +139,7 @@ public class SyncController : UdonSharpBehaviour
         }
 
         ApplySyncedVisualState();
+        ApplyMode1RoundPlan();
         RequestSerialization();
     }
 
