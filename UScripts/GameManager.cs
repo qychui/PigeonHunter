@@ -11,6 +11,8 @@ namespace PigeonHunt
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class GameManager : UdonSharpBehaviour
     {
+        public GameObject TitleScreenBGM;
+
         [Header("Round Settings")]
         public int pigeonsPerRound = 10;
         public float spawnDelay = 4f;
@@ -2576,11 +2578,16 @@ namespace PigeonHunt
             }
 
             screenRetroTvMask.SetActive(!screenRetroTvMask.activeSelf);
+
+            enableGunShotFlashObjects = !enableGunShotFlashObjects;
         }
 
-        public void GunShotFlashToggle()
+        public void BGMToggle()
         {
-            enableGunShotFlashObjects = !enableGunShotFlashObjects;
+            if (TitleScreenBGM != null)
+            {
+                TitleScreenBGM.SetActive(!TitleScreenBGM.activeSelf);
+            }
         }
     }
 }
