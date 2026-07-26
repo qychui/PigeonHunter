@@ -15,6 +15,8 @@ namespace PigeonHunt
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class PigeonTarget : UdonSharpBehaviour
     {
+        #region Configuration Runtime State And Properties
+
         [Header("Scene References")]
         [SerializeField] private GameManager gameManager;
         [SerializeField] private RectTransform playArea;
@@ -138,6 +140,10 @@ namespace PigeonHunt
             return gameManager == manager;
         }
 
+        #endregion
+
+        #region Lifecycle And Setup
+
         private void Awake()
         {
             CacheColliderExtents();
@@ -178,36 +184,6 @@ namespace PigeonHunt
                 return;
             }
 
-            //if (fallbackExtents.x < 0f || fallbackExtents.y < 0f)
-            //{
-            //    fallbackExtents = new Vector2(Mathf.Max(0f, fallbackExtents.x), Mathf.Max(0f, fallbackExtents.y));
-            //}
-
-            //var size = hitCollider.size;
-            //var scale = hitCollider.transform.lossyScale;
-            //var scaleX = Mathf.Max(0.0001f, Mathf.Abs(scale.x));
-            //var scaleY = Mathf.Max(0.0001f, Mathf.Abs(scale.y));
-
-            //var minSizeX = Mathf.Max(0.0001f, fallbackExtents.x * 2f) / scaleX;
-            //var minSizeY = Mathf.Max(0.0001f, fallbackExtents.y * 2f) / scaleY;
-
-            //if (size.x < minSizeX)
-            //{
-            //    size.x = minSizeX;
-            //}
-
-            //if (size.y < minSizeY)
-            //{
-            //    size.y = minSizeY;
-            //}
-
-            //if (size.z <= 0f)
-            //{
-            //    size.z = 0.0001f;
-            //}
-
-            //hitCollider.size = size;
-            //CacheColliderExtents();
         }
 
         public void SetManager(GameManager manager)
@@ -221,6 +197,10 @@ namespace PigeonHunt
 
             RefreshMovementBounds();
         }
+
+        #endregion
+
+        #region Flight Initialization And Exit Requests
 
         public void BeginFlight(Vector3 startPosition, int directionIndex, float lifetimeSeconds, float difficultyMultiplier, float escapeTriggerReduction, float minimumEscapeTriggerTime)
         {
@@ -282,6 +262,27 @@ namespace PigeonHunt
             QychuiUtilities.SetColliderEnabled(hitCollider, true);
 
             UpdateFlightAudioState();
+        }
+
+        public void BeginSeededFlight(
+            Vector3 startPosition,
+            int directionIndex,
+            float lifetimeSeconds,
+            float difficultyMultiplier,
+            float escapeTriggerReduction,
+            float minimumEscapeTriggerTime,
+            int roundSeed,
+            int spawnIndex,
+            int poolIndex)
+        {
+            BeginFlight(
+                startPosition,
+                directionIndex,
+                lifetimeSeconds,
+                difficultyMultiplier,
+                escapeTriggerReduction,
+                minimumEscapeTriggerTime);
+            SetDeterministicRandomContext(roundSeed, spawnIndex, poolIndex);
         }
 
         public void SetDeterministicRandomContext(int roundSeed, int spawnIndex, int poolIndex)
@@ -421,6 +422,10 @@ namespace PigeonHunt
                     return new Vector3(1f, 0f, 0f);
             }
         }
+
+        #endregion
+
+        #region Hit Scoring And Feedback
 
         public void ApplyHit(Vector3 hitPoint, Vector3 hitNormal, VRCPlayerApi shooter)
         {
@@ -571,6 +576,10 @@ namespace PigeonHunt
             return 1;
         }
 
+        #endregion
+
+        #region Animation And Direction
+
         public bool TryRandomizeFlightDirection()
         {
             if (!isActive || isDespawning || hasBeenHit || exitActive || escapeActive)
@@ -656,9 +665,7 @@ namespace PigeonHunt
 
             currentFlightDirection = desiredDirection;
 
-            //Debug.Log(currentFlightDirection + flightState);
-
-            animator.SetInteger(flightState, currentFlightDirection);
+            TrySetFlightAnimatorState(currentFlightDirection);
 
             if (logDirectionChanges)
             {
@@ -666,9 +673,6 @@ namespace PigeonHunt
 
                 var angleText = float.IsNaN(angle) ? "n/a" : $"{angle:0.##} deg";
 
-                //Debug.Log(
-                //    $"[PigeonTarget] {name} direction changed {GetFlightDirectionLabel(previousDirection)} -> {GetFlightDirectionLabel(desiredDirection)} (vector {direction}, angle {angleText})",
-                //    gameObject);
             }
         }
 
@@ -676,48 +680,43 @@ namespace PigeonHunt
         {
             currentFlightDirection = -1;
 
-            if (!setAnimatorDefault || animator == null || string.IsNullOrEmpty(flightState))
+            if (!setAnimatorDefault)
             {
                 return;
             }
 
-            animator.SetInteger(flightState, FlightRight);
+            TrySetFlightAnimatorState(FlightRight);
         }
 
         private void SetExitAnimationState()
         {
             currentFlightDirection = FlightUp;
-
-            if (animator == null || string.IsNullOrEmpty(flightState))
-            {
-                return;
-            }
-
-            animator.SetInteger(flightState, FlightUp);
+            TrySetFlightAnimatorState(FlightUp);
         }
 
         private void SetHitAnimationState()
         {
             currentFlightDirection = FlightHit;
-
-            if (animator == null || string.IsNullOrEmpty(flightState))
-            {
-                return;
-            }
-
-            animator.SetInteger(flightState, FlightHit);
+            TrySetFlightAnimatorState(FlightHit);
         }
 
         private void SetShotDownAnimationState()
         {
             currentFlightDirection = FlightShotDown;
+            TrySetFlightAnimatorState(FlightShotDown);
+        }
 
-            if (animator == null || string.IsNullOrEmpty(flightState))
+        private void TrySetFlightAnimatorState(int state)
+        {
+            if (animator == null ||
+                !animator.isActiveAndEnabled ||
+                animator.runtimeAnimatorController == null ||
+                string.IsNullOrEmpty(flightState))
             {
                 return;
             }
 
-            animator.SetInteger(flightState, FlightShotDown);
+            animator.SetInteger(flightState, state);
         }
 
         private void ApplyMovementDirection(Vector3 newDirection)
@@ -856,6 +855,10 @@ namespace PigeonHunt
 
             return baseDirection;
         }
+
+        #endregion
+
+        #region Movement Lifetime And Recycling
 
         private void TickMovement(float deltaTime)
         {
@@ -1167,6 +1170,10 @@ namespace PigeonHunt
                 BeginExpirySequence(position, false);
             }
         }
+
+        #endregion
+
+        #region Escape Boundary And Coordinate Space
 
         private void BeginNaturalEscape()
         {
@@ -1487,6 +1494,10 @@ namespace PigeonHunt
             return playArea.TransformPoint(new Vector3(localPosition.x, localPosition.y, 0f));
         }
 
+        #endregion
+
+        #region Audio And Deterministic Random
+
         private void UpdateFlightAudioState()
         {
             if (flightAudio == null)
@@ -1684,5 +1695,7 @@ namespace PigeonHunt
 
             return FlightRightDown;
         }
+
+        #endregion
     }
 }

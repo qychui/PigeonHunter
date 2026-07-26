@@ -1,13 +1,13 @@
 using UdonSharp;
 using UnityEngine;
-using VRC.SDK3.UdonNetworkCalling;
-using VRC.Udon.Common.Interfaces;
 
 namespace PigeonHunt
 {
     public class QychuiUtilities : UdonSharpBehaviour
     {
         private const float MinVectorSqrMagnitude = 0.0001f;
+
+        #region Audio And Particle Helpers
 
         /// <summary>
         /// Plays an audio source if the reference is valid.
@@ -56,6 +56,10 @@ namespace PigeonHunt
         /// <summary>
         /// Returns a normalized normal vector, falling back to the supplied direction when the original normal is invalid.
         /// </summary>
+        #endregion
+
+        #region Vector Transform And Rect Helpers
+
         public static Vector3 GetSafeNormal(Vector3 normal, Vector3 fallbackDirection)
         {
             if (normal.sqrMagnitude > MinVectorSqrMagnitude)
@@ -155,6 +159,10 @@ namespace PigeonHunt
         /// <summary>
         /// Converts a percent value (0-100) to a ratio (0-1).
         /// </summary>
+        #endregion
+
+        #region Numeric And Collider Helpers
+
         public static float PercentToRatio(float percent)
         {
             return Mathf.Clamp01(percent * 0.01f);
@@ -191,5 +199,7 @@ namespace PigeonHunt
                 collider.enabled = shouldEnable;
             }
         }
+
+        #endregion
     }
 }

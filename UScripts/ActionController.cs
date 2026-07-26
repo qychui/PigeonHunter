@@ -1,12 +1,13 @@
 using UdonSharp;
 using UnityEngine;
-using UnityEngine.UIElements;
 
 namespace PigeonHunt
 {
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class ActionController : UdonSharpBehaviour
     {
+        #region Runtime State And Public Properties
+
         private GameManager manager;
 
         private bool roundActive;
@@ -133,6 +134,10 @@ namespace PigeonHunt
                 return multiplier;
             }
         }
+
+        #endregion
+
+        #region Initialization And Main Tick
 
         public void Initialize(GameManager owner)
         {
@@ -381,16 +386,12 @@ namespace PigeonHunt
                 return;
             }
 
-            #region Start Delay
-
             if (startDelayTime > 0f)
             {
                 startDelayTime -= Time.deltaTime;
 
                 return;
             }
-
-            #endregion
 
             if (spawnTimer > 0f)
             {
@@ -429,6 +430,10 @@ namespace PigeonHunt
                 TrySpawnSinglePigeon();
             }
         }
+
+        #endregion
+
+        #region Round Flow Settlement And Synced Results
 
         public void BeginRound()
         {
@@ -930,6 +935,10 @@ namespace PigeonHunt
             DespawnAllPigeons();
         }
 
+        #endregion
+
+        #region Hit Shot And Resolution Flow
+
         public void RegisterPigeonHit(PigeonTarget pigeon)
         {
             if (manager == null)
@@ -1400,6 +1409,10 @@ namespace PigeonHunt
             manager.animationController.PlayHitAnimationAtWorldPosition(pos);
         }
 
+        #endregion
+
+        #region Spawn Pair Mode And Wave Flow
+
         private void TryStartPairSpawn()
         {
             if (!TrySpawnSinglePigeon(out int firstIndex, out PigeonTarget firstPigeon, false, false))
@@ -1549,10 +1562,28 @@ namespace PigeonHunt
             pigeon.SetPlayArea(manager.playArea);
             spawnIndex = pigeonsSpawnedThisRound;
             spawnedPigeon = pigeon;
-            pigeon.BeginFlight(startPosition, directionIndex, 0f, DifficultyMultiplier, GetCurrentPigeonEscapeTriggerReduction(), manager.pigeonEscapeTriggerMinimum);
             if (ShouldUseSyncedRoundPlan())
             {
-                pigeon.SetDeterministicRandomContext(mode1PlanSeed, spawnIndex, GetPigeonPoolIndex(pigeon));
+                pigeon.BeginSeededFlight(
+                    startPosition,
+                    directionIndex,
+                    0f,
+                    DifficultyMultiplier,
+                    GetCurrentPigeonEscapeTriggerReduction(),
+                    manager.pigeonEscapeTriggerMinimum,
+                    mode1PlanSeed,
+                    spawnIndex,
+                    GetPigeonPoolIndex(pigeon));
+            }
+            else
+            {
+                pigeon.BeginFlight(
+                    startPosition,
+                    directionIndex,
+                    0f,
+                    DifficultyMultiplier,
+                    GetCurrentPigeonEscapeTriggerReduction(),
+                    manager.pigeonEscapeTriggerMinimum);
             }
 
             pigeonsSpawnedThisRound++;
@@ -1762,6 +1793,10 @@ namespace PigeonHunt
 
             ResetWaveTracking();
         }
+
+        #endregion
+
+        #region Target Pool And Synced Round Plan
 
         private void ResetWaveTracking()
         {
@@ -2066,6 +2101,10 @@ namespace PigeonHunt
                 pigeon.TryBeginNaturalEscape();
             }
         }
+
+        #endregion
+
+        #region Reset Rules And UI Helpers
 
         private void InitializePool()
         {
@@ -2489,6 +2528,8 @@ namespace PigeonHunt
         {
             return Mathf.Sin(t * Mathf.PI * 0.9f) * (1f - (0.55f * t));
         }
+
+        #endregion
     }
 }
 

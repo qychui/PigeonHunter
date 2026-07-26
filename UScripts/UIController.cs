@@ -2,14 +2,14 @@
 using UdonSharp;
 using UnityEngine;
 using VRC.SDKBase;
-using VRC.Udon;
-using PigeonHunt;
 
 namespace PigeonHunt 
 {
     [UdonBehaviourSyncMode(BehaviourSyncMode.Manual)]
     public class UIController : UdonSharpBehaviour
     {
+        #region Serialized References And Display State
+
         [Header("Title Screen")]
         public GameObject titleScreenObject;
         public GameObject[] modeOption;
@@ -157,6 +157,10 @@ namespace PigeonHunt
         private const int ShootingRangeIntroPhaseGoBlink = 3;
         private const int ShootingRangeIntroPhaseWaitAfterGo = 4;
 
+        #endregion
+
+        #region Initialization And Main Tick
+
         void Start()
         {
             RefreshAll();
@@ -178,6 +182,10 @@ namespace PigeonHunt
         {
             SetDifficultyLevel(difficulty);   
         }
+
+        #endregion
+
+        #region Public Display And Animation API
 
         public void SetGunState(int type, int currentBullets, int maxBullets)
         {
@@ -704,6 +712,10 @@ namespace PigeonHunt
             return BeginClayHitCountAnimation();
         }
 
+        #endregion
+
+        #region Mode Selection And Refresh
+
         private void RefreshAll()
         {
             InitializeModeSelection();
@@ -825,6 +837,10 @@ namespace PigeonHunt
 
             return Mathf.Min(modeOption.Length, modeOptionArrows.Length);
         }
+
+        #endregion
+
+        #region Digit Indicator And Difficulty Rendering
 
         private void UpdateRoundDigits()
         {
@@ -986,6 +1002,10 @@ namespace PigeonHunt
             var shouldActive = _clayTargetHitStates != null && index < _clayTargetHitStates.Length && _clayTargetHitStates[index];
             SetGameObjectActive(indicator, shouldActive);
         }
+
+        #endregion
+
+        #region Settlement Overlay And Intro Animation Ticks
 
         private void TickHitCountAnimation()
         {
@@ -1533,6 +1553,10 @@ namespace PigeonHunt
             _isMaskBlinking = false;
         }
 
+        #endregion
+
+        #region Buffers Raw Rendering And Material Helpers
+
         private void EnsureHitStateBuffer()
         {
             if (pigeonHitIndicators == null || pigeonHitIndicators.Length == 0)
@@ -1935,5 +1959,7 @@ namespace PigeonHunt
                 SetGameObjectActive(mask, shouldActive);
             }
         }
+
+        #endregion
     }
 }

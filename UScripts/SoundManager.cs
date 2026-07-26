@@ -1,6 +1,4 @@
 ﻿
-using System;
-using System.Collections;
 using UdonSharp;
 using UnityEngine;
 using UnityEngine.Serialization;
@@ -8,6 +6,8 @@ using UnityEngine.Serialization;
 [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
 public class SoundManager : UdonSharpBehaviour
 {
+    #region Audio References And Sequence State
+
     [Header("Dog Audio")]
     public AudioSource missAudio;
     public AudioSource getAudio;
@@ -49,6 +49,10 @@ public class SoundManager : UdonSharpBehaviour
     private AudioSource sequenceSource;
     private bool sequenceFullHit;
     private AudioSource activeFlightSource;
+
+    #endregion
+
+    #region Single Sound And Sequence Commands
 
     public void PlayGunShot(AudioSource source)
     {
@@ -154,6 +158,10 @@ public class SoundManager : UdonSharpBehaviour
         PigeonHunt.QychuiUtilities.SafeStop(scoreCountAudio);
         PigeonHunt.QychuiUtilities.SafeStop(fullHitAudio);
     }
+
+    #endregion
+
+    #region Sequence Tick And Helpers
 
     public bool IsSequenceActive()
     {
@@ -296,4 +304,6 @@ public class SoundManager : UdonSharpBehaviour
                sequence == SequenceRoundFailNoDog ? step >= 2 :
                true;
     }
+
+    #endregion
 }

@@ -6,6 +6,8 @@ namespace PigeonHunt
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class ClayTarget : UdonSharpBehaviour
     {
+        #region Configuration Runtime State And Properties
+
         [Header("References")]
         [SerializeField] private GameManager gameManager;
 
@@ -54,6 +56,10 @@ namespace PigeonHunt
         {
             return gameManager == manager;
         }
+
+        #endregion
+
+        #region Lifecycle Setup And Flight
 
         private void Awake()
         {
@@ -186,6 +192,10 @@ namespace PigeonHunt
             return movementSpace.TransformPoint(localPosition);
         }
 
+        #endregion
+
+        #region Hit Resolution And Recycling
+
         public void OnShot(Vector3 hitPoint, Vector3 hitNormal)
         {
             if (!isActive || hasResolved)
@@ -254,6 +264,10 @@ namespace PigeonHunt
                 gameManager.NotifyClayAvailable(this, wasHit);
             }
         }
+
+        #endregion
+
+        #region Visual Timeline And Audio
 
         private void UpdateVisual()
         {
@@ -401,6 +415,10 @@ namespace PigeonHunt
             QychuiUtilities.SafeStop(clayShootingWhistle);
         }
 
+        #endregion
+
+        #region Score And Hit Feedback
+
         public int GetScoreForCurrentRound()
         {
             switch (GetHitTierForRound(GetCurrentRoundNumber()))
@@ -464,5 +482,7 @@ namespace PigeonHunt
 
             return 1;
         }
+
+        #endregion
     }
 }

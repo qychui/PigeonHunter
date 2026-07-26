@@ -1,791 +1,439 @@
-# Pigeon Hunter 重构与排行榜准备方案
+# Pigeon Hunter 零行为变更代码清理与 Region 配置方案
 
-## 1. 文档目标
+## 1. 文档定位
 
-本方案的目标不是立即实现排行榜，而是先清理和重构 Pigeon Hunter，使游戏具备稳定、统一、可验证的成绩数据源和整局生命周期。
+本方案替代此前的 Pigeon Hunter 逻辑重构方案。
 
-排行榜的最终规划为：
+此前方案包含统一计分规则、调整数据权威、重写结算状态、合并方法和重新分配职责等内容。这类修改会改变可执行代码，可能引入玩法、动画时序或网络同步回归，因此不再属于本轮代码优化范围。
 
-- Mode A：本地、每周、全部
-- Mode B：本地、每周、全部
-- Mode C：本地、每周、全部
+本轮只做两件事：
 
-即 3 个游戏模式乘以 3 个榜单范围，共 9 个逻辑榜单。
+- 清理不影响运行结果的代码噪音。
+- 使用 `#region` 整理现有脚本的阅读结构。
 
-本阶段只为这 9 个榜单准备公共数据和接口，不实现排行榜面板、PlayerData 持久化、外部 API 上传或榜单读取。
+本轮不实现排行榜，也不为排行榜改造现有游戏逻辑。排行榜应在现有游戏验证稳定后，通过独立方案和独立脚本接入。
 
-## 2. 当前代码的主要问题
+## 2. 核心原则
 
-### 2.1 分数由 UI 持有
+### 2.1 零行为变更
 
-当前权威分数保存在 `UIController.scoreCurrent` 中，Mode A/B、Mode C、同步快照和 Top Score 都直接读取或修改这个字段。
+清理前后必须保持以下内容完全一致：
 
-这造成以下问题：
+- 三种模式的开始、回合、波次、命中、失败和重开流程。
+- 分数、Perfect 奖励、难度和通关规则。
+- 动画、音频、延迟和 UI 显示时序。
+- owner、远端和晚加入玩家的网络同步行为。
+- 随机种子、生成顺序和随机调用次数。
+- Unity Inspector、Prefab、场景和 Udon Program Asset 引用。
+- 所有 public、UnityEvent、Interact、NetworkCallable 和字符串事件入口。
 
-- UI 同时是数据模型和显示层。
-- 隐藏、替换或拆分 UI 可能影响游戏结果。
-- 将来排行榜只能依赖具体 UI 组件读取最终成绩。
-- 分数修改入口分散，难以保证没有重复加分。
-- Perfect 奖励由 UI 动画结束时直接加分，业务结果依赖动画是否正常播放。
+发现逻辑问题时只记录，不在本轮顺手修复。修复必须使用单独任务、单独分析和单独验证矩阵。
 
-结论：分数必须迁移到独立的整局状态控制器，UI 只能显示分数。
+### 2.2 保持资产和脚本结构
 
-### 2.2 Mode A/B 和 Mode C 有两套整局状态
+- 不新增、删除、移动或重命名运行时脚本。
+- 不修改类名、命名空间和 `.meta` GUID。
+- 不替换 Prefab 上的组件。
+- 不手动修改 UdonSharp Program Asset 或 `SerializedUdonPrograms`。
+- 不修改 Prefab、场景、材质、AnimatorController 和音频资产。
+- 不将现有职责拆到新脚本。
+- 不建立新的基类、接口、配置对象或规则对象。
 
-Mode A/B 的整局状态主要位于 `ActionController`：
+### 2.3 Region 只用于导航
 
-- `currentRoundIndex`
-- `gameLocked`
-- `roundActive`
-- `roundEndPending`
-- `carryScorePending`
-- `carryScoreValue`
+`#region` 不代表代码架构发生变化，也不授权移动职责或改写逻辑。
 
-Mode C 的整局状态主要位于 `GameManager`：
+配置 Region 时：
 
-- `shootingRangeSessionActive`
-- `shootingRangeRoundsCompleted`
-- `shootingRangeGameOver`
-- `shootingRangeRoundEndPending`
-- `shootingRangeRoundPassed`
-- `shootingRangeHitsThisRound`
+- 只在现有成员边界前后插入 `#region` 和 `#endregion`。
+- 不为了让方法进入某个 Region 而移动方法。
+- 不改变方法顺序。
+- 不在方法内部添加 Region。
+- 不嵌套 Region。
+- Region 名称使用英文职责名，避免 `Misc`、`Other`、`Temp` 等模糊名称。
+- 一个 Region 应包含连续、相近的现有代码；不能跨越互不相关的方法。
 
-因此外部系统无法通过一个统一入口回答以下问题：
+## 3. 允许修改的白名单
 
-- 当前是否正在进行一局游戏？
-- 当前模式是什么？
-- 当前分数是多少？
-- 当前到达第几回合？
-- 当前成绩是否有效？
-- 整局是否已经结算？
+本轮代码改动只能属于以下类型：
 
-### 2.3 `GameManager` 职责过多
+### 3.1 Region
 
-当前 `GameManager` 同时负责：
+```csharp
+#region Mode Selection And Start Flow
 
-- 模式选择和开始
-- 重开和返回标题
-- Mode C 的全部玩法流程
-- Mode A/B 的网络事件转发
-- Mode C 的网络事件转发
-- 所有权转移
-- 枪械重生和闪光
-- 场景对象显隐
-- 晚加入快照
-- 强制结算调试入口
+// 原有代码，内容和顺序不变
 
-这使 `GameManager` 成为修改任何功能时都必须触碰的中心文件，也让排行榜接入容易继续扩大该文件。
-
-### 2.4 `UIController` 职责过多
-
-当前 `UIController` 同时负责：
-
-- 分数数据
-- 房间 Top Score 数据与同步
-- 模式选择
-- 数字材质显示
-- 子弹显示
-- 命中状态显示
-- Round、Good、Perfect、Game Over 显示
-- Mode C 开场流程
-- 多种逐帧 UI 动画
-- Perfect 奖励结算
-
-其中“数据、业务结算、输入选择、纯显示和动画”互相混在一起。
-
-### 2.5 重置语义不明确
-
-当前存在多层重置：
-
-- `ResetAndRestartGame`
-- `ReturnToTitleScreen`
-- `ActionController.Initialize`
-- `ResetRoundState`
-- `ResetRoundRuntimeState`
-- `ResetShootingRangeSessionState`
-- 各种 Clear/Reset UI 方法
-
-部分方法会清理状态后立即开始新回合，部分会保留 Game Over，部分会回标题画面。调用者很难仅从名字判断清理范围。
-
-### 2.6 多人所有权与成绩归属没有独立规则
-
-当前拾取枪械会转移 gameplay ownership。游戏可以在所有权变化后继续，但排行榜需要明确：
-
-- 成绩属于谁？
-- 中途换人是否仍是个人成绩？
-- 远端客户端是否可以把同步得到的分数保存到自己的 PlayerData？
-
-如果不先解决这个问题，将来可能出现房间内所有玩家保存同一成绩，或者后来拾枪的玩家继承前一个玩家分数的情况。
-
-## 3. 目标架构
-
-建议采用组合式结构，不引入复杂继承、反射、委托或通用接口层。UdonSharp 下应优先使用明确的组件引用、普通公开方法和必要的自定义事件。
-
-目标职责如下：
-
-```text
-GameManager
-  负责总流程编排、模式选择、组件装配和兼容入口
-
-PigeonSessionController
-  负责整局状态、分数、进度、计时、成绩有效性和最终结果
-
-ActionController（后续可改名 PigeonRoundController）
-  只负责 Mode A/B 的回合、波次、鸽子生成和命中结算
-
-ShootingRangeController
-  从 GameManager 抽出，只负责 Mode C 的回合、波次和飞盘逻辑
-
-SyncController
-  只负责网络传输、去重、快照和所有权事件，不直接决定 UI 或排行榜结果
-
-UIController
-  迁移期作为 UI 门面，最终只协调多个显示组件
-
-InstanceTopScoreController
-  负责当前房间的电视 Top Score；它和未来的本地排行榜是两种概念
+#endregion
 ```
 
-## 4. 新增统一整局控制器
+允许增加、删除或更正 `#region/#endregion`，但不得借此调整可执行代码。
 
-建议新增 `PigeonSessionController`，作为未来排行榜唯一可信的数据源。
+### 3.2 空白和格式
 
-### 4.1 状态定义
+- 删除多余空行、行尾空格和重复缩进。
+- 统一大括号和换行格式。
+- 统一文件末尾换行。
+- 不执行会大面积改写整个文件的自动格式化。
 
-建议使用整数常量而不是依赖复杂枚举序列化：
+### 3.3 注释
 
-```text
-Idle       尚未准备
-Prepared   已选择模式，等待实际开始
-Running    正在游戏
-Settling   最终结算中，禁止继续修改成绩
-Finished   已生成一次最终结果
-Invalid    游戏可以继续，但成绩不可进入排行榜
-```
+- 删除整块已注释掉的旧代码。
+- 删除与当前代码明显不符的过期注释。
+- 修正拼写错误和错误的模式名称。
+- 为复杂现有流程增加简短的职责说明。
+- 不通过注释掩盖未解决的逻辑问题。
 
-`RoundActive`、`roundEndPending`、波次状态仍由具体模式控制器维护；Session 状态只表示“整局”，不要把回合和波次状态也塞入 Session。
+### 3.4 Using
 
-### 4.2 权威字段
+- 删除编译器能够确认未使用的 `using`。
+- 不增加与本轮清理无关的依赖。
+- 删除后必须重新编译，防止扩展方法或类型解析发生变化。
 
-建议至少包含：
+## 4. 明确禁止的修改
 
-```text
-sessionState
-gameMode
-score
-roundReached
-roundsCleared
-elapsedTimeMs
-startServerTimeMs
-eligibleForLeaderboard
-invalidReason
-resultRevision
-hasFinalResult
-starterPlayerId
-starterDisplayName
-```
+以下内容即使看起来更简洁，也不属于本轮清理：
 
-说明：
+- 修改任何条件判断、循环、返回值或调用顺序。
+- 提取、合并、拆分或内联方法。
+- 修改方法参数、访问级别或名称。
+- 新增业务辅助方法。
+- 删除未确认的 private、public 或序列化成员。
+- 将多个布尔值改成枚举或阶段状态机。
+- 统一 Mode A/B 与 Mode C 的规则实现。
+- 修改目标得分、命中特效等级或回合来源。
+- 修改 UI 与 GameManager 之间的数据流。
+- 修改 Reset、Start、Update、Interact 或 OnDeserialization 流程。
+- 修改 requestId、revision、NetworkCallable 或 RequestSerialization。
+- 调整即时网络事件与手动序列化的组合。
+- 修改随机公式、salt、seed、随机调用次数或生成顺序。
+- 修改常量、默认值、Tooltip、Range 或 Inspector 配置。
+- 修改字段序列化形式或使用 `[FormerlySerializedAs]` 迁移字段。
+- 删除空脚本、备份文件或 Program Asset。
 
-- `gameMode` 使用统一的 1、2、3，不再让部分代码使用 0、1、2 后长期传播。
-- `roundReached` 表示玩家实际进入的最高回合。
-- `roundsCleared` 表示成功通过的回合数。
-- `resultRevision` 用于保证一次整局只结算一次。
-- 玩家名称只用于展示，不能作为唯一身份或防作弊凭据。
-
-### 4.3 公共方法
-
-建议提供以下明确入口：
+下列此前建议明确取消，不在本轮实施：
 
 ```text
-PrepareSession(int mode)
-BeginSession()
-AddScore(int amount)
-SetScoreFromNetwork(int value)
-EnterRound(int roundNumber)
-CompleteRound(int roundNumber)
-BeginFinalSettlement()
-FinishSession()
-InvalidateSession(int reason)
-ResetSession()
+统一 Perfect、难度、通关和命中档位规则
+为目标新增 GetScoreForRound 等业务接口
+将结算布尔组合改写为阶段状态机
+重新分配 GameManager、ActionController、UIController 职责
+删除兼容 public 方法或序列化字段
+拆分 Mode C、Session、UI 或网络控制器
 ```
 
-并提供只读查询方法：
+## 5. Region 配置规范
+
+Region 只按当前代码的实际连续顺序配置。如果文件中的职责交叉，允许出现两个名称带前缀的相关 Region，例如：
 
 ```text
-GetState()
-GetMode()
-GetScore()
-GetRoundReached()
-GetRoundsCleared()
-GetElapsedTimeMs()
-IsRunning()
-IsFinished()
-IsLeaderboardEligible()
-HasFinalResult()
-GetResultRevision()
+Mode C Network Events
+Mode C Runtime And Settlement
 ```
 
-未来排行榜只读取这些方法，不读取 `UIController`、`ActionController` 或 Mode C 私有字段。
+不要移动方法来强行合成一个 Region。
 
-### 4.4 最终结果冻结
+### 5.1 GameManager.cs
 
-`FinishSession()` 必须具备幂等性：
-
-- 第一次调用冻结结果并增加 `resultRevision`。
-- 后续重复调用不重复生成结果。
-- `Finished` 或 `Invalid` 后不再允许 `AddScore`。
-- 结果冻结后，UI 动画可以继续播放，但不能再修改成绩。
-
-这能避免 Game Over 音频、动画、同步回调或重复网络事件导致重复提交。
-
-## 5. 分数系统重构
-
-### 5.1 分数写入统一化
-
-所有业务代码改为调用：
+建议按现有顺序选择适用区域：
 
 ```text
-sessionController.AddScore(amount)
+Configuration And Runtime State
+Ownership
+Session State And Public Result Access
+Shared Existing Rule Queries
+Gun Network Events
+Initialization And Receiver Binding
+Main Loop And Public Round Routing
+Mode Selection And Scheduled Start
+Common Mode Start Presentation
+Mode A And B Routing
+Mode A And B Network Apply
+Mode C Network Events
+Mode C Target Events
+Pigeon Exit Presentation
+Mode C Runtime
+Mode C Settlement
+Gun Runtime Utilities
+Scene Presentation And Menu Toggles
 ```
 
-写入成功后，由 Session 通知 UI 刷新，或者由调用方在迁移期显式执行：
+约束：
+
+- 不合并 Mode A/B 和 Mode C 的实现。
+- 不移动 Mode C 方法来重新排序。
+- 不调整 Session 或网络同步逻辑。
+
+### 5.2 ActionController.cs
 
 ```text
-uiController.SetScoreDisplay(sessionController.GetScore())
+Runtime State And Public Properties
+Initialization And Main Tick
+Round Flow
+Synced Round Plan
+Synced Round Result
+Round Settlement
+Hit And Shot Flow
+Single Mode Resolution
+Pair Mode Resolution
+Spawn And Wave Flow
+Target Pool
+Deterministic Random Plan
+Reset And UI Helpers
 ```
 
-最终应删除或停止业务代码使用：
+约束：
+
+- 不改写 `Tick()`。
+- 不调整回合结算阶段或动画等待顺序。
+- 不修改随机计划和同步等待条件。
+
+### 5.3 SyncController.cs
 
 ```text
-UIController.scoreCurrent
-UIController.AddScore
-UIController.AddScoreForHit
-UIController.SetScoreValue
+Receiver Configuration
+Synced Payload Fields
+Handled Request State
+Ownership
+Visual Object Sync
+Menu Selection And Start Sync
+Mode A And B Sync
+Session Snapshot
+Mode C Sync
+Deserialization And Replay
+Flow Events
+Receiver Helpers
 ```
 
-迁移期间可以暂时保留这些方法作为兼容转发，但它们只能转发到 Session，不能再保存另一份分数。
+约束：
 
-### 5.2 Perfect 奖励迁移
+- 网络发送方法、NetworkCallable 和 Apply 方法保持原顺序。
+- `OnDeserialization()` 的 Apply 顺序完全不变。
+- `ReplayPendingReceiverEvents()` 的顺序完全不变。
+- 不尝试用通用 payload 或数组抽象不同网络事件。
 
-当前 Perfect 奖励由 `UIController.EndPerfectDisplay()` 在动画结束时加分。这应改为：
-
-1. 模式控制器确定本回合 Perfect。
-2. 模式控制器计算奖励。
-3. 立即通过 Session 增加奖励并形成确定的业务结果。
-4. UI 只接收“显示多少奖励”和“播放多久”，不得修改分数。
-
-这样即使 UI 对象缺失、动画被关闭或玩家晚加入，最终成绩仍一致。
-
-### 5.3 分数上限
-
-当前分数会受到数字材质位数和 `UIController.maxScore` 限制。重构后需要区分：
-
-- 数据上限：由游戏规则决定。
-- 显示上限：由六位数字材质决定。
-
-建议 Session 使用明确的 `maxSessionScore`。UI 只对显示值做格式化或溢出显示，不得反向截断 Session 的权威分数。
-
-## 6. Mode A/B/C 生命周期统一
-
-### 6.1 统一开始流程
-
-当前 `StartModeA` 和 `StartModeB` 高度重复，应合并为：
+### 5.4 UIController.cs
 
 ```text
-StartPigeonMode(int mode)
+Serialized References And Display State
+Initialization And Main Tick
+Mode Selection
+Score Round And Difficulty Display
+Bullet Display
+Pigeon Hit Indicators And Masks
+Clay Hit Indicators And Masks
+Settlement Animation Public API
+Settlement Animation Ticks
+Overlay And Shooting Range Intro
+Room Top Score
+Digit Material Rendering
+Buffers And Raw Object Helpers
 ```
 
-Mode C 保留独立玩法入口，但走相同的 Session 前置流程：
+约束：
+
+- 不合并鸽子与飞盘动画状态机。
+- 不删除兼容显示或计分入口。
+- 不修改 UdonSynced Top Score 字段。
+
+### 5.5 PigeonTarget.cs
 
 ```text
-StartConfirmedMode(mode)
-  -> ResetForNewSession()
-  -> sessionController.PrepareSession(mode)
-  -> 配置模式场景和模式控制器
-  -> 在实际允许玩家射击时 BeginSession()
+Configuration Runtime State And Properties
+Lifecycle And Setup
+Flight Initialization
+Exit And Escape Requests
+Hit Resolution And Feedback
+Scoring Queries
+Animator State
+Movement And Lifetime
+Boundary Reflection
+Coordinate Space And Bounds
+Audio
+Deterministic Random
 ```
 
-不要在收到模式选择同步时让每个客户端都创建自己的有效成绩。只有符合成绩所有权规则的客户端可以建立 eligible Session，其他客户端只应用网络镜像状态。
+约束：
 
-### 6.2 统一回合进度
+- 不修改确定性随机数算法。
+- 不调整碰墙反射、逃离或回收条件。
+- 不与 `ClayTarget` 建立公共基类。
 
-Mode A/B：
-
-- `BeginRound()` 后调用 `EnterRound(currentRound)`。
-- 成功结算后调用 `CompleteRound(currentRound)`。
-- 失败结算不增加 `roundsCleared`。
-
-Mode C：
-
-- 开始当前射击场回合时调用 `EnterRound(shootingRangeRoundsCompleted + 1)`。
-- 成功后调用 `CompleteRound(currentRound)`。
-- 失败时保持 `roundReached = roundsCleared + 1`。
-
-这样未来三个模式都能提供一致的 `roundReached` 和 `roundsCleared`。
-
-### 6.3 统一整局结束
-
-Mode A/B 只有失败回合才结束整局，不能在每次 `EndRound()` 时结束 Session。
-
-推荐接入点：
-
-- Mode A/B：失败结果已经确定、最终分数已经计算完成，但 `FinalizeEndRound()` 尚未清理状态时。
-- Mode C：`FinalizeShootingRangeRoundEnd()` 判断失败后、设置 Game Over 并返回标题前。
-
-两个模式控制器最终都只调用：
+### 5.6 ClayTarget.cs
 
 ```text
-sessionController.BeginFinalSettlement()
-sessionController.FinishSession()
+Configuration Runtime State And Properties
+Lifecycle And Flight
+Hit Resolution And Recycling
+Visual Timeline
+Audio
+Scoring Queries And Feedback
 ```
 
-Game Over UI、音频和返回标题不再负责生成成绩。
+约束：
 
-## 7. GameManager 清理方案
+- 不修改抛物线、视觉阶段和回收判断。
+- 不与 `PigeonTarget` 合并生命周期。
 
-### 7.1 保留职责
-
-`GameManager` 最终只保留：
-
-- 引用装配与启动初始化
-- 模式选择请求
-- 开始、重开、返回菜单的总流程编排
-- 枪、模式控制器、Session、Sync 和 UI 之间的少量路由
-- 对旧 Prefab/UdonEvent 暂时提供兼容入口
-
-### 7.2 抽出 Mode C
-
-建议新增 `ShootingRangeController`，迁移以下代码：
-
-- Mode C Session 内的回合与波次字段
-- 飞盘生成、池索引和轨迹参数
-- Mode C 命中/射击次数
-- Mode C 回合通过判断
-- Mode C 难度与生命周期计算
-- Mode C Round End 流程
-- Mode C 波次种子应用
-
-`GameManager` 不再直接维护 `shootingRangeGameOver` 等玩法字段，而是通过统一的 Session 状态和 `ShootingRangeController` 查询回合状态。
-
-### 7.3 合并重复初始化
-
-将 `StartModeA`、`StartModeB`、`StartModeC` 中重复的 UI 清理、目标回收和状态初始化收敛为：
+### 5.7 MainAreaAnimationController.cs
 
 ```text
-ResetCommonPresentation()
-ResetAllTargetPools()
-ConfigureModeScene(int mode)
-StartModeController(int mode)
+Configuration And Runtime State
+Lifecycle
+Public Animation Commands
+Animator State
+Generic Movement State
+Round Start Movement
+Round Next Movement
+Hit Miss And End Round Movement
+Audio And Rendering Helpers
 ```
 
-`StartPigeonMode(mode)` 和 `StartShootingRangeMode()` 只保留模式差异。
+约束：
 
-### 7.4 明确重置层级
+- 不修改任何持续时间、阶段常量或物体显隐时机。
+- 不合并相似但时序不同的运动流程。
 
-建议统一为四种语义：
+### 5.8 其他脚本
+
+`GunController.cs`：
 
 ```text
-ResetWaveState()       仅清理当前波次
-ResetRoundState()      清理当前回合，保留整局分数
-ResetSessionState()    清理整局成绩和所有模式运行状态
-ReturnToMenu()         清理运行状态并切换标题画面
+Configuration And Runtime State
+Pickup And Ownership
+Input And Fire Control
+Raycast And Hit Routing
+Effects And Audio
+Reset And Helpers
 ```
 
-“重开当前模式”应显式调用：
+`SoundManager.cs`：
 
 ```text
-ResetSessionState()
-StartConfirmedMode(currentMode)
+Audio References And Sequence State
+Single Sound Playback
+Round Sequences
+Sequence Tick And Stop
+Helpers
 ```
 
-不要再通过局部保存 `shootingRangeGameOver` 后调用一个会重置它的方法来实现返回标题。
-
-## 8. ActionController 清理方案
-
-### 8.1 限定为 Mode A/B 控制器
-
-`ActionController` 的名字过于宽泛。完成迁移后建议改名为 `PigeonRoundController`，职责限定为：
-
-- 单鸽/双鸽回合流程
-- 波次和子弹窗口
-- 鸽子生成、回收与结算动画触发
-- 回合命中数与通过判断
-- Mode A/B 确定性随机计划的应用
-
-### 8.2 删除整局分数所有权
-
-应删除：
-
-- `carryScorePending`
-- `carryScoreValue`
-- 从 `UIController.scoreCurrent` 读取/写回分数的代码
-
-通过回合后，Session 分数天然保留，不再需要先从 UI 抄到 `carryScoreValue`，再在下一回合写回 UI。
-
-### 8.3 删除重复 Game Over 状态
-
-`gameLocked` 可以暂时保留为 Mode A/B 内部输入锁，但“整局是否结束”的权威状态应来自 Session。
-
-完成迁移后：
-
-- 输入锁是回合控制细节。
-- Game Over 是 Session 状态。
-- 标题画面是否显示是 UI 状态。
-
-三者不再由同一个布尔值间接推断。
-
-### 8.4 保留不应强行抽象的内容
-
-以下逻辑不建议与 Mode C 合并：
-
-- 单鸽/双鸽生成策略
-- 飞行方向和边界偏转
-- 配对鸽结算动画
-- 鸽子自然逃离
-- Mode A/B 的确定性 Round Plan
-
-这些是具体玩法，不是公共整局模型。强行做通用基类会增加 UdonSharp 复杂度，却不能减少真正的维护成本。
-
-## 9. UIController 拆分方案
-
-建议分两步拆分，避免一次性破坏 Prefab 上大量引用。
-
-### 9.1 第一阶段：保留门面
-
-保留 `UIController` 的公开方法，让现有调用继续工作，但内部逐步委托给独立组件：
+`QychuiUtilities.cs`：
 
 ```text
-ModeSelectionView
-ScoreDisplay
-RoundStatusDisplay
-HitIndicatorView
-WeaponStatusView
-ResultAnimationView
-SceneViewController
+Audio And Particle Helpers
+Vector And Transform Helpers
+RectTransform Bounds
+Collider Helpers
 ```
 
-### 9.2 第二阶段：删除业务状态
+文件较短时可以不使用 Region。不要为了形式统一给只有几个方法的文件增加大量 Region。
 
-UI 最终不得持有：
+## 6. 清理流程
 
-- 权威分数
-- 整局是否结束
-- 回合是否通过
-- Perfect 奖励值的业务结算权
-- 排行榜成绩有效性
+### 阶段 0：建立基线
 
-UI 可以持有：
+- 保存清理前的编译结果。
+- 记录三个模式的单机、双客户端和晚加入测试结果。
+- 记录当前警告，区分项目已有警告和新增警告。
+- 搜索 public、NetworkCallable、UnityEvent 和字符串事件入口。
 
-- 当前显示到第几帧或第几步
-- 动画计时器
-- 当前显隐状态
-- 材质和 GameObject 引用
+### 阶段 1：只配置 Region
 
-### 9.3 房间 Top Score 独立
+- 一次只处理一个脚本。
+- 只插入 Region，不移动方法。
+- 每处理一个文件，检查 Region 数量是否成对。
+- 编译确认无预处理器或括号错误。
 
-当前三个 `[UdonSynced]` Top Score 字段应迁移到 `InstanceTopScoreController`。
+### 阶段 2：非行为清理
 
-它表示当前房间电视上展示的最高分，与未来榜单不同：
+- 删除未使用 using。
+- 删除明确的注释代码和过期注释。
+- 清理空白、缩进和文件末尾换行。
+- 不删除成员、不改方法体。
 
-- Instance Top Score：当前实例内的即时共享记录。
-- Local Leaderboard：当前实例玩家各自持久化的历史最佳记录。
-- Weekly/All：外部服务提供的跨实例排名。
+### 阶段 3：Diff 审计
 
-不要让这三种数据共用同一个字段或同步方式。
-
-## 10. 网络同步重构
-
-### 10.1 权威顺序
-
-所有同步结果应遵守：
+逐文件检查差异。允许出现的新增或删除内容只能是：
 
 ```text
-网络数据到达
-  -> 验证 revision/requestId
-  -> 更新玩法控制器和 Session
-  -> 根据 Session 刷新 UI
+#region
+#endregion
+using
+注释
+空白
 ```
 
-禁止网络回调先修改 UI，然后再从 UI 反推业务状态。
-
-### 10.2 统一 Session 快照
-
-当前 Mode A/B 同步 Round Result，Mode C 同步 Round Snapshot。建议在不替代具体玩法事件的前提下，增加统一 Session 快照：
+如果 diff 中出现以下内容，本轮改动不合格：
 
 ```text
-sessionRevision
-sessionState
-gameMode
-score
-roundReached
-roundsCleared
-eligibleForLeaderboard
+if / else / switch / for / while
+return
+方法调用
+赋值语句
+字段或常量
+方法签名
+Attribute
+网络事件名称
 ```
 
-用途：
+### 阶段 4：验证
 
-- 晚加入玩家恢复公共显示。
-- 所有客户端看到一致的分数和回合。
-- 未来榜单逻辑能区分“本地有效结果”和“远端镜像结果”。
+- `Assembly-CSharp` 编译为 0 错误。
+- Unity 中触发 UdonSharp 编译。
+- 打开相关场景和 Prefab，确认没有 Missing Script。
+- 验证三种模式正常开始、通过、失败和重开。
+- 验证 owner、远端、Perfect 分数、鸽子生成和晚加入同步。
 
-命中、飞盘生成、鸽子生成等高频玩法事件仍保留模式专用 payload，不必强行合并。
+## 7. 验收标准
 
-### 10.3 所有权变化策略
+- 没有新增、删除、移动或重命名脚本。
+- 没有修改 Prefab、场景、Program Asset 或 `.meta`。
+- 所有 Region 成对且没有方法内 Region。
+- 可执行语句与清理前完全一致。
+- public、UnityEvent、Interact、NetworkCallable 和字符串事件入口完全一致。
+- 序列化字段、默认值和 Inspector 配置完全一致。
+- 网络字段、事件顺序和随机调用顺序完全一致。
+- C# 与 UdonSharp 编译通过。
+- 三种模式及双客户端行为与基线一致。
 
-建议采用以下竞争成绩规则：
+## 8. 问题记录规则
 
-- Session 开始时记录 gameplay owner。
-- 只有该玩家的本地客户端拥有可保存的成绩。
-- 其他客户端只维护镜像 Session，永远不能保存该成绩。
-- Session 运行中发生 gameplay ownership 转移时，将本局标记为 `InvalidOwnerTransfer`。
-- 游戏本身可以继续，但最终结果不进入后续 9 个榜单。
+清理过程中发现以下问题时，只记录到单独的问题列表，不直接处理：
 
-如果以后希望支持多人轮流射击，应另外设计 Team/Shared 排行榜，不能把共享成绩当成个人成绩。
+- 分数或 Perfect 奖励不同步。
+- 新玩家加入状态不一致。
+- 远端游戏开始但目标不生成。
+- UI 字段参与业务计算。
+- 重复规则或重复状态机。
+- 可疑死代码、空脚本或备份文件。
+- 可能不再使用的 public 方法和序列化字段。
 
-## 11. 面向 9 个榜单的数据准备
-
-### 11.1 两个选择维度
-
-排行榜 UI 不应真的复制九套完整组件，而应使用两个正交选择维度：
+每个问题后续单独处理时必须包含：
 
 ```text
-Mode:   A / B / C
-Period: Local / Weekly / All
+复现步骤
+根因
+允许修改的脚本和行为范围
+网络与晚加入影响
+回归测试矩阵
 ```
 
-组合后得到 9 个逻辑榜单，共享同一套 Slot、分页和展示视图。
+## 9. 排行榜边界
 
-### 11.2 每个模式独立规则
+本轮不实现或准备排行榜代码，不修改现有游戏来适配排行榜。
 
-未来建议使用独立标识：
+后续排行榜仍规划为三个模式各自拥有：
 
 ```text
-pigeon_mode_a_v1
-pigeon_mode_b_v1
-pigeon_mode_c_v1
+Local
+Weekly
+All
 ```
 
-每个模式有各自的：
+共 9 个逻辑榜单。排行榜设计必须单独评审，并优先通过新增排行榜专用脚本读取稳定结果；不能借代码清理任务修改现有玩法、计分、UI 动画或网络同步。
 
-- PlayerData Key 前缀
-- Weekly API 数据
-- All API 数据
-- rulesetVersion
-- 最佳成绩
+## 10. 最终结论
 
-本地榜按模式读取 PlayerData；Weekly 和 All 按模式请求外部 API。
+本方案中的“优化”只表示提高代码可读性和可导航性，不表示调整架构或业务实现。
 
-### 11.3 公共结果结构
-
-Session 最终应能提供以下结构所需的全部值：
-
-```text
-mode
-score
-roundReached
-roundsCleared
-durationMs
-finishedDate
-buildVersion
-rulesetVersion
-eligible
-invalidReason
-resultRevision/runId
-```
-
-当前推荐排名顺序为：
-
-```text
-score 降序
-roundReached 降序
-durationMs 升序
-```
-
-最终排序规则可以在实现榜单前再次确认，但重构阶段必须完整保留这些原始字段，不能只保留一个格式化字符串。
-
-## 12. 文件调整建议
-
-建议最终形成：
-
-```text
-PigeonHunter/UScripts/Core/
-  GameManager.cs
-  PigeonSessionController.cs
-  PigeonGameMode.cs
-
-PigeonHunter/UScripts/Modes/Pigeon/
-  PigeonRoundController.cs
-  PigeonTarget.cs
-
-PigeonHunter/UScripts/Modes/ShootingRange/
-  ShootingRangeController.cs
-  ClayTarget.cs
-
-PigeonHunter/UScripts/Networking/
-  SyncController.cs
-  SessionSnapshotCodec.cs（只有确实需要编码时再添加）
-
-PigeonHunter/UScripts/UI/
-  UIController.cs
-  ModeSelectionView.cs
-  ScoreDisplay.cs
-  RoundStatusDisplay.cs
-  HitIndicatorView.cs
-  WeaponStatusView.cs
-  ResultAnimationView.cs
-  SceneViewController.cs
-  InstanceTopScoreController.cs
-
-PigeonHunter/UScripts/Weapons/
-  GunController.cs
-
-PigeonHunter/UScripts/Audio/
-  SoundManager.cs
-```
-
-不要在第一步直接移动所有文件。Unity `.meta`、Prefab 引用和 UdonSharp Program Asset 对大规模路径/类型调整较敏感，应在每个阶段保证场景可打开、UdonSharp 可编译后再继续。
-
-## 13. 分阶段实施顺序
-
-### 阶段 0：建立行为基线
-
-- 记录三个模式正常开始、通过、失败、重开和返回标题的行为。
-- 记录每个回合的计分、Perfect 奖励和分数上限。
-- 记录单人、双客户端、晚加入和中途换枪 owner 的结果。
-- 暂不重命名文件或移动目录。
-
-验收：获得一份可重复执行的手动测试矩阵。
-
-### 阶段 1：引入 Session，但保持原行为
-
-- 新增 `PigeonSessionController`。
-- 在 GameManager 中建立统一引用。
-- 接入模式准备、开始、进入回合、通过回合和失败整局事件。
-- Session 先镜像现有分数，不立即删除旧字段。
-- 增加开发期一致性检查：Session 分数必须等于旧 UI 分数。
-
-验收：三个模式的 Session 生命周期正确，现有画面和玩法不变。
-
-### 阶段 2：迁移权威分数
-
-- 所有命中得分改写 Session。
-- Perfect 奖励从 UI 迁移到模式结算。
-- 同步结果先更新 Session，再刷新 UI。
-- `UIController` 的旧分数方法改为兼容转发。
-- 删除 `carryScorePending/carryScoreValue`。
-
-验收：关闭部分 UI 动画或显示对象后，最终分数仍正确；不存在双重加分。
-
-### 阶段 3：统一开始、失败和重置流程
-
-- 合并 Mode A/B 开始方法。
-- 引入明确的 Wave/Round/Session/Menu 重置入口。
-- 统一整局 Finish 调用。
-- 移除通过 `gameLocked` 和 `shootingRangeGameOver` 推断公共 Session 状态的代码。
-
-验收：所有模式每局只产生一次最终结果，重开后 revision 和成绩从新局开始。
-
-### 阶段 4：抽出 ShootingRangeController
-
-- 将 Mode C 玩法字段和方法从 GameManager 迁出。
-- GameManager 只负责调用 Mode C 控制器。
-- 保持现有 Mode C 同步 payload，先不同时重写网络协议。
-
-验收：GameManager 不再包含飞盘生成、轨迹、波次和 Mode C Round End 细节。
-
-### 阶段 5：拆分 UIController
-
-- 先保留 UIController 门面。
-- 逐块迁移 Mode Selection、Score、Round、Hit、Weapon、Result 和 Scene View。
-- 抽出 Instance Top Score。
-- 删除 UI 中所有业务数据写入。
-
-验收：UI 组件只消费状态；替换 ScoreDisplay 不影响分数结果。
-
-### 阶段 6：整理网络边界
-
-- 增加统一 Session Snapshot。
-- 所有网络回调先更新状态再更新显示。
-- 集中 requestId/revision 去重规则。
-- 接入所有权变化导致的成绩失效。
-- 验证晚加入不会创建可保存的本地成绩。
-
-验收：双客户端分数、模式、回合和 Session 状态一致；只有正确 owner 的本地结果 eligible。
-
-### 阶段 7：删除兼容层和死代码
-
-- 删除 UI 权威分数字段和旧转发方法。
-- 删除重复 Game Over 状态。
-- 删除不再使用的重置分支和重复 UI 清理。
-- 删除临时一致性检查。
-- 最后再进行安全的文件改名和目录移动。
-
-验收：全项目搜索不到业务代码直接读写 UI 分数，GameManager 和 UIController 的职责显著缩小。
-
-### 阶段 8：排行榜接口冻结
-
-- 冻结 Session 最终结果字段和读取方法。
-- 确认三个模式的排名规则与 rulesetVersion。
-- 确认 Local/Weekly/All 的数据源和失败策略。
-- 此阶段结束后再开始实现排行榜。
-
-验收：排行榜实现不需要修改鸽子、飞盘、枪械或 UI 动画的内部逻辑。
-
-## 14. 测试矩阵
-
-每个阶段至少覆盖：
-
-| 场景 | Mode A | Mode B | Mode C |
-|---|---:|---:|---:|
-| 正常开始第一局 | 必测 | 必测 | 必测 |
-| 普通命中计分 | 必测 | 必测 | 必测 |
-| Perfect 奖励 | 必测 | 必测 | 必测 |
-| 通过一回合并保留分数 | 必测 | 必测 | 必测 |
-| 失败并冻结最终结果 | 必测 | 必测 | 必测 |
-| Game Over 后重开 | 必测 | 必测 | 必测 |
-| 返回菜单后切换模式 | 必测 | 必测 | 必测 |
-| 双客户端同步 | 必测 | 必测 | 必测 |
-| 晚加入快照 | 必测 | 必测 | 必测 |
-| 中途转移 owner | 必测 | 必测 | 必测 |
-| 重复网络事件 | 必测 | 必测 | 必测 |
-| 缺失部分 UI 引用 | 必测 | 必测 | 必测 |
-
-重点断言：
-
-- 一次命中只加一次分。
-- 一次整局只产生一次最终结果。
-- UI 动画不能改变权威成绩。
-- 通过回合不会结束 Session。
-- 失败回合会记录正确的 `roundReached`。
-- 重开不会继承上一局分数或 eligibility。
-- 远端镜像结果不会被当作本地个人成绩。
-- owner 转移后成绩按规则失效，但玩法仍能继续。
-
-## 15. 完成标准
-
-在开始排行榜开发前，Pigeon Hunter 应满足：
-
-- 存在唯一的权威 Session 分数。
-- 存在统一的 Mode A/B/C 整局状态。
-- 三个模式通过同一接口报告分数、回合和最终结果。
-- UI 不再持有或修改业务成绩。
-- GameManager 不再包含完整的 Mode C 玩法实现。
-- Mode A/B 不再通过 UI 临时保存跨回合分数。
-- 所有权转移有明确的成绩有效性规则。
-- 晚加入只恢复镜像状态，不产生本地有效成绩。
-- 最终结果具有 revision/runId，能够防止本地重复处理。
-- 9 个逻辑榜单可以只依赖 Session 最终结果实现，不需要再次侵入玩法代码。
-
-## 16. 明确不在本阶段实施的内容
-
-- 不制作排行榜面板。
-- 不创建九套榜单 Slot。
-- 不写 PlayerData 排名逻辑。
-- 不请求 Weekly/All API。
-- 不复制或修改 Mario 排行榜 Prefab。
-- 不生成上传 URL 或签名。
-- 不实现反作弊服务。
-- 不为了未来排行榜改变现有计分数值和难度规则。
-
-先完成数据权威、生命周期、所有权和职责拆分，再实现排行榜，可以显著降低后续返工风险。
+执行时以零行为变更为最高约束。任何需要修改可执行代码的事项，无论改动多小，都必须退出本方案并建立独立任务。

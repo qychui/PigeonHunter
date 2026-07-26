@@ -1,7 +1,6 @@
 using UdonSharp;
 using UnityEngine;
 using UnityEngine.Serialization;
-using UnityEngine.UIElements;
 
 namespace PigeonHunt
 {
@@ -16,6 +15,8 @@ namespace PigeonHunt
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class MainAreaAnimationController : UdonSharpBehaviour
     {
+        #region Configuration And Runtime State
+
         [Header("Animator Reference")]
         [SerializeField] private Animator animator;
 
@@ -257,6 +258,10 @@ namespace PigeonHunt
         public float GameNextDuration => Mathf.Max(Mathf.Max(0f, gameNextDuration), GetRoundNextMovementSequenceDuration());
         public float GameNextDelay => Mathf.Max(0f, gameNextDelay);
 
+        #endregion
+
+        #region Lifecycle
+
         private void Start()
         {
             EnsureInitialized();
@@ -303,6 +308,10 @@ namespace PigeonHunt
                 UpdateStateReset();
             }
         }
+
+        #endregion
+
+        #region Public Animation Commands
 
         public void PlayGameStartAnimation()
         {
@@ -507,6 +516,10 @@ namespace PigeonHunt
             ApplyState(idleState);
         }
 
+        #endregion
+
+        #region Animator And Generic Movement State
+
         private void RequestMovement(DogMovementType type)
         {
             if (type == DogMovementType.None)
@@ -708,7 +721,7 @@ namespace PigeonHunt
         {
             EnsureInitialized();
 
-            if (!initialized || animator == null)
+            if (!CanWriteAnimatorState())
             {
                 return;
             }
@@ -720,6 +733,14 @@ namespace PigeonHunt
 
             currentState = targetState;
             animator.SetInteger(stateParameterHash, targetState);
+        }
+
+        private bool CanWriteAnimatorState()
+        {
+            return initialized &&
+                   animator != null &&
+                   animator.isActiveAndEnabled &&
+                   animator.runtimeAnimatorController != null;
         }
 
         private void UpdateMovementRequestDelay()
@@ -1080,6 +1101,10 @@ namespace PigeonHunt
         }
 
 
+        #endregion
+
+        #region Round Start Movement
+
         private void UpdateRoundStartMovement()
         {
             if (roundStartMovementTarget == null)
@@ -1242,6 +1267,10 @@ namespace PigeonHunt
 
             return 1f;
         }
+
+        #endregion
+
+        #region Round Next Movement
 
         private void UpdateRoundNextMovement()
         {
@@ -1487,6 +1516,10 @@ namespace PigeonHunt
 
             return 1f;
         }
+
+        #endregion
+
+        #region Shared Movement Audio And Rendering Helpers
 
         private float GetRoundStartMovementSequenceDuration()
         {
@@ -1808,6 +1841,8 @@ namespace PigeonHunt
 
             return dogMainCanvas;
         }
+
+        #endregion
     }
 }
 

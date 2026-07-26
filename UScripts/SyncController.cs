@@ -8,6 +8,8 @@ using VRC.Udon.Common.Interfaces;
 [UdonBehaviourSyncMode(BehaviourSyncMode.Manual)]
 public class SyncController : UdonSharpBehaviour
 {
+    #region Receiver Configuration And Synced Payloads
+
     [Header("Gun Shot Effects")]
     public AudioSource gunShotAudio;
     public AudioSource clayShotAudio;
@@ -121,6 +123,10 @@ public class SyncController : UdonSharpBehaviour
     private int handledMode3HitRequestId;
     private int handledMode3ShotRequestId;
 
+    #endregion
+
+    #region Ownership
+
     public void TransferOwnershipToLocalPlayer()
     {
         EnsureLocalOwner();
@@ -150,6 +156,10 @@ public class SyncController : UdonSharpBehaviour
             Networking.SetOwner(Networking.LocalPlayer, gameObject);
         }
     }
+
+    #endregion
+
+    #region Visual Menu And Start Sync
 
     private void ApplySyncedVisualState()
     {
@@ -287,6 +297,10 @@ public class SyncController : UdonSharpBehaviour
         RequestSerialization();
     }
 
+    #endregion
+
+    #region Mode A And B Sync
+
     public int GetMode1RoundNumber()
     {
         return mode1RoundNumber;
@@ -398,6 +412,10 @@ public class SyncController : UdonSharpBehaviour
         RequestSerialization();
     }
 
+    #endregion
+
+    #region Mode C Snapshot Accessors
+
     public int GetMode3WaveRoundNumber()
     {
         return mode3WaveRoundNumber;
@@ -432,6 +450,10 @@ public class SyncController : UdonSharpBehaviour
     {
         return mode3RoundSnapshotActive;
     }
+
+    #endregion
+
+    #region Mode C Sync
 
     public void SyncMode3RoundSnapshot(int roundNumber, int score, int difficulty)
     {
@@ -572,6 +594,10 @@ public class SyncController : UdonSharpBehaviour
         SendReceiverEvent(mode3ShotReceiver, mode3ShotEventName);
     }
 
+    #endregion
+
+    #region Deserialization And Flow Events
+
     public override void OnDeserialization()
     {
         ApplySyncedVisualState();
@@ -616,6 +642,10 @@ public class SyncController : UdonSharpBehaviour
 
         receiver.SendCustomEvent(eventName);
     }
+
+    #endregion
+
+    #region Synced Object And Receiver Helpers
 
     private void InitializeObjectMaskFromScene()
     {
@@ -787,4 +817,5 @@ public class SyncController : UdonSharpBehaviour
         SendReceiverEvent(mode3RoundSnapshotReceiver, mode3RoundSnapshotEventName);
     }
 
+    #endregion
 }

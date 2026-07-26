@@ -1,7 +1,6 @@
 ﻿using UdonSharp;
 using UnityEngine;
 using UnityEngine.Serialization;
-using VRC.Core;
 using VRC.SDK3.Components;
 using VRC.SDKBase;
 using VRC.Udon.Common.Interfaces;
@@ -11,6 +10,8 @@ namespace PigeonHunt
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class GameManager : UdonSharpBehaviour
     {
+        #region Configuration And Runtime State
+
         public GameObject TitleScreenBGM;
 
         [Header("Round Settings")]
@@ -190,6 +191,10 @@ namespace PigeonHunt
         public float DifficultyMultiplier => actionController != null ? actionController.DifficultyMultiplier : DefaultDifficulty;
         public float CurrentPigeonBoundaryRandomDeflectionChance => GetPigeonBoundaryRandomDeflectionChanceForRound(actionController != null ? actionController.CurrentRoundNumber : 1);
 
+        #endregion
+
+        #region Ownership
+
         public void TransferGameplayOwnershipToLocalPlayer(GameObject pickedUpObject)
         {
             if (Networking.LocalPlayer == null)
@@ -224,6 +229,10 @@ namespace PigeonHunt
         {
             return syncController == null || syncController.IsLocalOwner();
         }
+
+        #endregion
+
+        #region Gun Network Events
 
         public void SyncRespawnGun()
         {
@@ -263,6 +272,10 @@ namespace PigeonHunt
                 HideGunShotFlashObjects();
             }
         }
+
+        #endregion
+
+        #region Initialization And Receiver Binding
 
         private void Start()
         {
@@ -371,6 +384,10 @@ namespace PigeonHunt
             }
         }
 
+        #endregion
+
+        #region Main Loop And Public Round Routing
+
         public override void Interact()
         {
             if (actionController == null)
@@ -463,6 +480,10 @@ namespace PigeonHunt
             var value = baseValue + ((roundNumber - 1) * stepPerRound);
             return Mathf.Min(value, maxValue);
         }
+
+        #endregion
+
+        #region Mode Selection And Start Flow
 
         public void ResetAndRestartGame()
         {
@@ -802,6 +823,10 @@ namespace PigeonHunt
             }
         }
 
+        #endregion
+
+        #region Mode A And B Gameplay And Network Apply
+
         public void RegisterPigeonHit(PigeonTarget pigeon)
         {
             SyncMode1PigeonHit(pigeon);
@@ -1027,6 +1052,10 @@ namespace PigeonHunt
                    syncController != null &&
                    IsLocalGameplayOwner();
         }
+
+        #endregion
+
+        #region Mode C Network And Target Events
 
         private void SyncMode3ClayHit(int clayIndex)
         {
@@ -1359,6 +1388,10 @@ namespace PigeonHunt
             ScheduleNextShootingRangeWave();
         }
 
+        #endregion
+
+        #region Pigeon Exit Presentation
+
         public void PlayPigeonExitAnimation(PigeonTarget pigeon)
         {
             exitAnimationActive = false;
@@ -1447,6 +1480,10 @@ namespace PigeonHunt
                 target.SetActive(shouldBeActive);
             }
         }
+
+        #endregion
+
+        #region Mode C Session Entry
 
         private void StartShootingRangeDemo()
         {
@@ -1551,6 +1588,10 @@ namespace PigeonHunt
             BeginNextShootingRangeWave();
         }
 
+        #endregion
+
+        #region Menu Return
+
         private void ReturnToTitleScreen()
         {
             var preserveGameOver = shootingRangeGameOver;
@@ -1573,6 +1614,10 @@ namespace PigeonHunt
                 ShowTitleScreenScene();
             }
         }
+
+        #endregion
+
+        #region Gun Runtime Utilities
 
         private void CacheGunInitialTransform()
         {
@@ -1661,6 +1706,10 @@ namespace PigeonHunt
                 }
             }
         }
+
+        #endregion
+
+        #region Target Reset And Mode C Runtime
 
         private void DespawnAllPigeons()
         {
@@ -2531,6 +2580,10 @@ namespace PigeonHunt
             return mixed;
         }
 
+        #endregion
+
+        #region Scene Presentation And Menu Toggles
+
         private void ShowTitleScreenScene()
         {
             if (uiController == null)
@@ -2586,8 +2639,10 @@ namespace PigeonHunt
         {
             if (TitleScreenBGM != null)
             {
-                TitleScreenBGM.SetActive(!TitleScreenBGM.activeSelf);
-            }
+            TitleScreenBGM.SetActive(!TitleScreenBGM.activeSelf);
         }
+
+        #endregion
     }
+}
 }

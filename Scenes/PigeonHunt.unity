@@ -683,6 +683,96 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: f0f0353651eb3cd499844be07506a590, type: 3}
+--- !u!1 &87285714 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 1223337235575780782, guid: f0f0353651eb3cd499844be07506a590,
+    type: 3}
+  m_PrefabInstance: {fileID: 87285713}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &87285715 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 2902427249606047564, guid: f0f0353651eb3cd499844be07506a590,
+    type: 3}
+  m_PrefabInstance: {fileID: 87285713}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &87285716 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 4044759029829505067, guid: f0f0353651eb3cd499844be07506a590,
+    type: 3}
+  m_PrefabInstance: {fileID: 87285713}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &87285717 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 9184704097480603543, guid: f0f0353651eb3cd499844be07506a590,
+    type: 3}
+  m_PrefabInstance: {fileID: 87285713}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &87285718 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 933390498532181937, guid: f0f0353651eb3cd499844be07506a590,
+    type: 3}
+  m_PrefabInstance: {fileID: 87285713}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &87285719 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 4176109397022442100, guid: f0f0353651eb3cd499844be07506a590,
+    type: 3}
+  m_PrefabInstance: {fileID: 87285713}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &87285720 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 3938418529561672500, guid: f0f0353651eb3cd499844be07506a590,
+    type: 3}
+  m_PrefabInstance: {fileID: 87285713}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &87285721 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 362338786143731830, guid: f0f0353651eb3cd499844be07506a590,
+    type: 3}
+  m_PrefabInstance: {fileID: 87285713}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &87285722 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 6719322874341211517, guid: f0f0353651eb3cd499844be07506a590,
+    type: 3}
+  m_PrefabInstance: {fileID: 87285713}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &87285723 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 8882671612340953742, guid: f0f0353651eb3cd499844be07506a590,
+    type: 3}
+  m_PrefabInstance: {fileID: 87285713}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &87285724 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 7689906159394792902, guid: f0f0353651eb3cd499844be07506a590,
+    type: 3}
+  m_PrefabInstance: {fileID: 87285713}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &87285725 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 5604576857058260256, guid: f0f0353651eb3cd499844be07506a590,
+    type: 3}
+  m_PrefabInstance: {fileID: 87285713}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &87285726 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 3422890932118107743, guid: f0f0353651eb3cd499844be07506a590,
+    type: 3}
+  m_PrefabInstance: {fileID: 87285713}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &87285727 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 470377468708762106, guid: f0f0353651eb3cd499844be07506a590,
+    type: 3}
+  m_PrefabInstance: {fileID: 87285713}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &87285728 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 7405193124193924351, guid: f0f0353651eb3cd499844be07506a590,
+    type: 3}
+  m_PrefabInstance: {fileID: 87285713}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &298294802 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 2243455662874163221, guid: d2444356154a2494588a3b158207bf09,
@@ -2647,13 +2737,20 @@ MonoBehaviour:
   useAssignedLayers: 0
   DynamicPrefabs: []
   DynamicMaterials:
-  - {fileID: 2100000, guid: 8c4a5721f8c947d41a201f1116ca73d6, type: 2}
-  - {fileID: 2100000, guid: bc5f36699681c4441a6a25440ad0a138, type: 2}
-  - {fileID: 2100000, guid: e2a32069cb332a641953809b2c292371, type: 2}
+  - {fileID: 2100000, guid: 4e499b23bd023ff43b4e1301a80087ac, type: 2}
+  - {fileID: 2100000, guid: c20a7924edf00164c84a1e2524e84bc6, type: 2}
   - {fileID: 10303, guid: 0000000000000000f000000000000000, type: 0}
-  - {fileID: 2100000, guid: 6062e31e7d6bf744da855febdc6b5fb8, type: 2}
-  - {fileID: 2100000, guid: 36d7ac4a7105ea24cb5b140998ec9818, type: 2}
-  - {fileID: 2100000, guid: 42872c15fed6f064abf6623c88aa1260, type: 2}
+  - {fileID: 2100000, guid: de69316c6db11e343b6487d1b4eccece, type: 2}
+  - {fileID: 2100000, guid: 74b4456cca0725e47b5e6cf89720c30b, type: 2}
+  - {fileID: 2100000, guid: 5d7743ff011938f4fbd972d722898e3a, type: 2}
+  - {fileID: 2100000, guid: ef02279f56eee624fb6f6896282c493f, type: 2}
+  - {fileID: 2100000, guid: e47db4f36b1be7144ac951c1bd804fab, type: 2}
+  - {fileID: 2100000, guid: 67d14671d44df17448aa6be5de30f497, type: 2}
+  - {fileID: 10308, guid: 0000000000000000f000000000000000, type: 0}
+  - {fileID: 2100000, guid: 54072ec6746cd874ba624344102c9644, type: 2}
+  - {fileID: 2100000, guid: 8c4a5721f8c947d41a201f1116ca73d6, type: 2}
+  - {fileID: 2100000, guid: 9374fc52ba937f449a4b0b22c21c3598, type: 2}
+  - {fileID: 2100000, guid: bd277c1261ecf8847b042142913540c3, type: 2}
   - {fileID: 2100000, guid: 57eff696167f30342ac23337406389d0, type: 2}
   - {fileID: 2100000, guid: a1030a86bd428bd43ba17dd83d2c3182, type: 2}
   - {fileID: 2100000, guid: b77e35abf0c05f44992b5851b5d78a7c, type: 2}
@@ -2667,17 +2764,6 @@ MonoBehaviour:
   - {fileID: 2100000, guid: 77769fe48946fd44db3afc89991456a6, type: 2}
   - {fileID: 2100000, guid: 79cb126b1fbec9d4285dca29c85ee2da, type: 2}
   - {fileID: 2100000, guid: 5f9b85f3daa994c439babff8ff4cecd4, type: 2}
-  - {fileID: 2100000, guid: 74b4456cca0725e47b5e6cf89720c30b, type: 2}
-  - {fileID: 2100000, guid: 5d7743ff011938f4fbd972d722898e3a, type: 2}
-  - {fileID: 2100000, guid: ef02279f56eee624fb6f6896282c493f, type: 2}
-  - {fileID: 2100000, guid: e47db4f36b1be7144ac951c1bd804fab, type: 2}
-  - {fileID: 2100000, guid: 67d14671d44df17448aa6be5de30f497, type: 2}
-  - {fileID: 10308, guid: 0000000000000000f000000000000000, type: 0}
-  - {fileID: 2100000, guid: 54072ec6746cd874ba624344102c9644, type: 2}
-  - {fileID: 2100000, guid: de69316c6db11e343b6487d1b4eccece, type: 2}
-  - {fileID: 2100000, guid: c20a7924edf00164c84a1e2524e84bc6, type: 2}
-  - {fileID: 2100000, guid: 9374fc52ba937f449a4b0b22c21c3598, type: 2}
-  - {fileID: 2100000, guid: bd277c1261ecf8847b042142913540c3, type: 2}
   LightMapsNear: []
   LightMapsFar: []
   LightMode: 0
@@ -2860,6 +2946,68 @@ MonoBehaviour:
     - VRC.Udon.UdonBehaviour
     - VRC.SDK3.Components.VRCPickup
     - VRC.SDK3.Components.VRCObjectSync
+  - gameObject: {fileID: 87285714}
+    ID: 41
+    SerializedTypeNames:
+    - VRC.Udon.UdonBehaviour
+  - gameObject: {fileID: 87285718}
+    ID: 42
+    SerializedTypeNames:
+    - VRC.Udon.UdonBehaviour
+  - gameObject: {fileID: 87285727}
+    ID: 43
+    SerializedTypeNames:
+    - VRC.Udon.UdonBehaviour
+    - VRC.SDK3.Components.VRCPickup
+    - VRC.SDK3.Components.VRCObjectSync
+  - gameObject: {fileID: 87285728}
+    ID: 44
+    SerializedTypeNames:
+    - VRC.Udon.UdonBehaviour
+  - gameObject: {fileID: 87285721}
+    ID: 45
+    SerializedTypeNames:
+    - VRC.Udon.UdonBehaviour
+  - gameObject: {fileID: 87285724}
+    ID: 46
+    SerializedTypeNames:
+    - VRC.Udon.UdonBehaviour
+  - gameObject: {fileID: 87285722}
+    ID: 47
+    SerializedTypeNames:
+    - VRC.Udon.UdonBehaviour
+  - gameObject: {fileID: 87285725}
+    ID: 48
+    SerializedTypeNames:
+    - VRC.Udon.UdonBehaviour
+  - gameObject: {fileID: 87285723}
+    ID: 49
+    SerializedTypeNames:
+    - VRC.Udon.UdonBehaviour
+  - gameObject: {fileID: 87285726}
+    ID: 50
+    SerializedTypeNames:
+    - VRC.Udon.UdonBehaviour
+  - gameObject: {fileID: 87285720}
+    ID: 51
+    SerializedTypeNames:
+    - VRC.Udon.UdonBehaviour
+  - gameObject: {fileID: 87285719}
+    ID: 52
+    SerializedTypeNames:
+    - VRC.Udon.UdonBehaviour
+  - gameObject: {fileID: 87285716}
+    ID: 53
+    SerializedTypeNames:
+    - VRC.Udon.UdonBehaviour
+  - gameObject: {fileID: 87285717}
+    ID: 54
+    SerializedTypeNames:
+    - VRC.Udon.UdonBehaviour
+  - gameObject: {fileID: 87285715}
+    ID: 55
+    SerializedTypeNames:
+    - VRC.Udon.UdonBehaviour
   portraitCameraPositionOffset: {x: 0, y: 0, z: 0}
   portraitCameraRotationOffset: {x: 0, y: 1, z: 0, w: -0.00000004371139}
   PlayerPersistence: []

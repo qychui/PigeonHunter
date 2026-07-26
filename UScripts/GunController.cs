@@ -9,6 +9,8 @@ namespace PigeonHunt
     [UdonBehaviourSyncMode(BehaviourSyncMode.Continuous)]
     public class GunController : UdonSharpBehaviour
     {
+        #region Configuration And Runtime State
+
         private const int LaserDisplayOff = 0;
         private const int LaserDisplayLineAndDot = 1;
         private const int LaserDisplayDotOnly = 2;
@@ -38,6 +40,10 @@ namespace PigeonHunt
 
         private float lastFireTime;
         private float lastUseDownTime = -10f;
+
+        #endregion
+
+        #region Lifecycle Pickup And Input
 
         private void Start()
         {
@@ -130,6 +136,10 @@ namespace PigeonHunt
         {
             SetLaserHeldState(false);
         }
+
+        #endregion
+
+        #region Laser State And Network Sync
 
         private void CycleLaserDisplayMode()
         {
@@ -240,6 +250,10 @@ namespace PigeonHunt
                 laserHitDot.SetActive(false);
             }
         }
+
+        #endregion
+
+        #region Fire Raycast And Effects
 
         private bool TryFire()
         {
@@ -406,5 +420,7 @@ namespace PigeonHunt
                 QychuiUtilities.SafePlay(shotAudio);
             }
         }
+
+        #endregion
     }
 }
