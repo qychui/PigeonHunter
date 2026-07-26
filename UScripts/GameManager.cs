@@ -120,6 +120,9 @@ namespace PigeonHunt
         [Header("Controller")]
         public ActionController actionController;
 
+        [Header("Leaderboard Run Record")]
+        public PigeonRunRecordController runRecordController;
+
         [Header("SyncController")]
         public SyncController syncController;
 
@@ -230,6 +233,49 @@ namespace PigeonHunt
             return syncController == null || syncController.IsLocalOwner();
         }
 
+        public void PrepareLeaderboardRun(int modeId)
+        {
+            if (runRecordController != null)
+            {
+                runRecordController.PrepareRun(modeId);
+            }
+        }
+
+        public void BeginLeaderboardRun()
+        {
+            if (runRecordController != null)
+            {
+                runRecordController.BeginRun();
+            }
+        }
+
+        public void RecordLeaderboardHit()
+        {
+            if (runRecordController != null)
+            {
+                runRecordController.RecordHit();
+            }
+        }
+
+        public void FinalizeLeaderboardRun(int reachedRound)
+        {
+            if (runRecordController == null)
+            {
+                return;
+            }
+
+            var finalScore = uiController != null ? uiController.scoreCurrent : 0;
+            runRecordController.FinalizeRun(finalScore, reachedRound);
+        }
+
+        public void InvalidateLeaderboardRun(int reason)
+        {
+            if (runRecordController != null)
+            {
+                runRecordController.InvalidateRun(reason);
+            }
+        }
+
         #endregion
 
         #region Gun Network Events
@@ -289,6 +335,11 @@ namespace PigeonHunt
             else
             {
                 Debug.LogWarning("[GameManager] Missing ActionController reference.");
+            }
+
+            if (runRecordController != null)
+            {
+                runRecordController.Initialize(this);
             }
 
             if (uiController != null)
@@ -517,6 +568,8 @@ namespace PigeonHunt
                 actionController.Initialize(this);
             }
 
+            PrepareLeaderboardRun(gameMode);
+
             if (gameMode == 3)
             {
                 if (uiController != null)
@@ -698,6 +751,7 @@ namespace PigeonHunt
         private void StartModeA()
         {
             gameMode = 1;
+            PrepareLeaderboardRun(gameMode);
             CancelPendingModeStart();
             ResetShootingRangeSessionState();
             DespawnAllClayTargets();
@@ -722,6 +776,7 @@ namespace PigeonHunt
         private void StartModeB()
         {
             gameMode = 2;
+            PrepareLeaderboardRun(gameMode);
             CancelPendingModeStart();
             ResetShootingRangeSessionState();
             DespawnAllClayTargets();
@@ -746,6 +801,7 @@ namespace PigeonHunt
         private void StartModeC()
         {
             gameMode = 3;
+            PrepareLeaderboardRun(gameMode);
             CancelPendingModeStart();
 
             if (actionController != null)
@@ -1124,6 +1180,7 @@ namespace PigeonHunt
             }
 
             shootingRangeHitsThisRound++;
+            RecordLeaderboardHit();
             if (uiController != null)
             {
                 uiController.AddScore(clayTarget.GetScoreForCurrentRound());
@@ -1240,6 +1297,7 @@ namespace PigeonHunt
             }
 
             shootingRangeHitsThisRound++;
+            RecordLeaderboardHit();
             uiController.AddScore(clayTarget.GetScoreForCurrentRound());
             uiController.SetClayTargetHitState(uiIndex, true);
             RefreshActiveClayMasks();
@@ -1883,6 +1941,7 @@ namespace PigeonHunt
             shootingRangeRoundEndPending = false;
             shootingRangeRoundEndUiTriggered = false;
             shootingRangeRoundEndAudioTriggered = false;
+            BeginLeaderboardRun();
             BeginNextShootingRangeWave();
         }
 
@@ -2255,6 +2314,8 @@ namespace PigeonHunt
                 return true;
             }
 
+            InvalidateLeaderboardRun(PigeonRunRecordController.InvalidReasonForcedSettlement);
+
             shootingRangeSecondClayPending = false;
             shootingRangeSecondClayTimer = 0f;
             shootingRangeNextWavePending = false;
@@ -2406,6 +2467,7 @@ namespace PigeonHunt
 
             if (!shootingRangeRoundPassed)
             {
+                FinalizeLeaderboardRun(Mathf.Max(1, shootingRangeRoundsCompleted + 1));
                 shootingRangeGameOver = true;
                 ReturnToTitleScreen();
                 return;

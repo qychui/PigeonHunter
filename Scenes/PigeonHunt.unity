@@ -193,6 +193,12 @@ PrefabInstance:
       propertyPath: m_AnchoredPosition.y
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 910000000000000001, guid: f0f0353651eb3cd499844be07506a590,
+        type: 3}
+      propertyPath: serializationData.Prefab
+      value: 
+      objectReference: {fileID: 910000000000000001, guid: f0f0353651eb3cd499844be07506a590,
+        type: 3}
     - target: {fileID: 1292860050421703286, guid: f0f0353651eb3cd499844be07506a590,
         type: 3}
       propertyPath: serializationData.Prefab
@@ -943,6 +949,91 @@ GameObject:
     type: 3}
   m_PrefabInstance: {fileID: 2052484186}
   m_PrefabAsset: {fileID: 0}
+--- !u!1001 &1065114295
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 3606229401123699402, guid: 9bc9da9564f9e614cab11d85a7ee0100,
+        type: 3}
+      propertyPath: m_Name
+      value: Active Region Manager
+      objectReference: {fileID: 0}
+    - target: {fileID: 5283309786831971120, guid: 9bc9da9564f9e614cab11d85a7ee0100,
+        type: 3}
+      propertyPath: serializationData.Prefab
+      value: 
+      objectReference: {fileID: 5283309786831971120, guid: 9bc9da9564f9e614cab11d85a7ee0100,
+        type: 3}
+    - target: {fileID: 5802006586329922174, guid: 9bc9da9564f9e614cab11d85a7ee0100,
+        type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5802006586329922174, guid: 9bc9da9564f9e614cab11d85a7ee0100,
+        type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5802006586329922174, guid: 9bc9da9564f9e614cab11d85a7ee0100,
+        type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5802006586329922174, guid: 9bc9da9564f9e614cab11d85a7ee0100,
+        type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 5802006586329922174, guid: 9bc9da9564f9e614cab11d85a7ee0100,
+        type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5802006586329922174, guid: 9bc9da9564f9e614cab11d85a7ee0100,
+        type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5802006586329922174, guid: 9bc9da9564f9e614cab11d85a7ee0100,
+        type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5802006586329922174, guid: 9bc9da9564f9e614cab11d85a7ee0100,
+        type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5802006586329922174, guid: 9bc9da9564f9e614cab11d85a7ee0100,
+        type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5802006586329922174, guid: 9bc9da9564f9e614cab11d85a7ee0100,
+        type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7088334998007996903, guid: 9bc9da9564f9e614cab11d85a7ee0100,
+        type: 3}
+      propertyPath: _syncMethod
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 7088334998007996903, guid: 9bc9da9564f9e614cab11d85a7ee0100,
+        type: 3}
+      propertyPath: serializedProgramAsset
+      value: 
+      objectReference: {fileID: 11400000, guid: c7a930e74ccacd341baf6a4ed299ca73,
+        type: 2}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 9bc9da9564f9e614cab11d85a7ee0100, type: 3}
 --- !u!1 &1069902874
 GameObject:
   m_ObjectHideFlags: 0
@@ -1076,6 +1167,12 @@ GameObject:
   m_CorrespondingSourceObject: {fileID: 6719322874341211517, guid: f0f0353651eb3cd499844be07506a590,
     type: 3}
   m_PrefabInstance: {fileID: 2052484186}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &1633927136 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 3606229401123699402, guid: 9bc9da9564f9e614cab11d85a7ee0100,
+    type: 3}
+  m_PrefabInstance: {fileID: 1065114295}
   m_PrefabAsset: {fileID: 0}
 --- !u!1 &1638785378 stripped
 GameObject:
@@ -2121,6 +2218,12 @@ PrefabInstance:
       propertyPath: m_AnchoredPosition.y
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 910000000000000001, guid: f0f0353651eb3cd499844be07506a590,
+        type: 3}
+      propertyPath: serializationData.Prefab
+      value: 
+      objectReference: {fileID: 910000000000000001, guid: f0f0353651eb3cd499844be07506a590,
+        type: 3}
     - target: {fileID: 1292860050421703286, guid: f0f0353651eb3cd499844be07506a590,
         type: 3}
       propertyPath: serializationData.Prefab
@@ -2826,10 +2929,6 @@ MonoBehaviour:
     ID: 11
     SerializedTypeNames:
     - VRC.Udon.UdonBehaviour
-  - gameObject: {fileID: 619246646}
-    ID: 12
-    SerializedTypeNames:
-    - VRC.Udon.UdonBehaviour
   - gameObject: {fileID: 1419942187}
     ID: 13
     SerializedTypeNames:
@@ -2950,10 +3049,6 @@ MonoBehaviour:
     ID: 41
     SerializedTypeNames:
     - VRC.Udon.UdonBehaviour
-  - gameObject: {fileID: 87285718}
-    ID: 42
-    SerializedTypeNames:
-    - VRC.Udon.UdonBehaviour
   - gameObject: {fileID: 87285727}
     ID: 43
     SerializedTypeNames:
@@ -3007,6 +3102,20 @@ MonoBehaviour:
   - gameObject: {fileID: 87285715}
     ID: 55
     SerializedTypeNames:
+    - VRC.Udon.UdonBehaviour
+  - gameObject: {fileID: 1633927136}
+    ID: 56
+    SerializedTypeNames:
+    - VRC.Udon.UdonBehaviour
+  - gameObject: {fileID: 87285718}
+    ID: 42
+    SerializedTypeNames:
+    - VRC.Udon.UdonBehaviour
+    - VRC.Udon.UdonBehaviour
+  - gameObject: {fileID: 619246646}
+    ID: 12
+    SerializedTypeNames:
+    - VRC.Udon.UdonBehaviour
     - VRC.Udon.UdonBehaviour
   portraitCameraPositionOffset: {x: 0, y: 0, z: 0}
   portraitCameraRotationOffset: {x: 0, y: 1, z: 0, w: -0.00000004371139}
@@ -3131,3 +3240,4 @@ SceneRoots:
   - {fileID: 87285713}
   - {fileID: 1974166748}
   - {fileID: 1740847511}
+  - {fileID: 1065114295}

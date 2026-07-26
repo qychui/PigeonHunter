@@ -324,10 +324,14 @@ namespace PigeonHunt
                     return;
                 }
 
-                if (!roundEndPassed && manager.uiController != null)
+                if (!roundEndPassed)
                 {
-                    manager.uiController.RefreshTopScoreOnGameOver();
-                    manager.uiController.SetGameOverActive(true);
+                    manager.FinalizeLeaderboardRun(GetDisplayedRoundNumber());
+                    if (manager.uiController != null)
+                    {
+                        manager.uiController.RefreshTopScoreOnGameOver();
+                        manager.uiController.SetGameOverActive(true);
+                    }
                 }
 
                 var passedRound = roundEndPassed;
@@ -461,6 +465,10 @@ namespace PigeonHunt
             roundActive = true;
             roundEndPending = false;
             currentRoundIndex++;
+            if (currentRoundIndex == 1)
+            {
+                manager.BeginLeaderboardRun();
+            }
             UpdateDifficultyForCurrentRound();
             ResetRoundRuntimeState();
             roundDifficultyBonus = CalculateRoundDifficultyBonus();
@@ -796,6 +804,8 @@ namespace PigeonHunt
                 return;
             }
 
+            manager.InvalidateLeaderboardRun(PigeonRunRecordController.InvalidReasonForcedSettlement);
+
             var requiredHits = GetRequiredHitsForDifficulty(GetDisplayedDifficultyLevel(), targetQuotaThisRound);
             pigeonsHitThisRound = Mathf.Max(pigeonsHitThisRound, requiredHits);
             UpdateHitDisplay();
@@ -809,6 +819,8 @@ namespace PigeonHunt
             {
                 return;
             }
+
+            manager.InvalidateLeaderboardRun(PigeonRunRecordController.InvalidReasonForcedSettlement);
 
             PrepareForcedRoundSettlement();
             EndRound();
@@ -956,6 +968,7 @@ namespace PigeonHunt
                 var scoreAmount = pigeon != null ? pigeon.GetScoreForCurrentRound() : manager.uiController.scorePerHit;
                 manager.uiController.AddScore(scoreAmount);
             }
+            manager.RecordLeaderboardHit();
             lastHitPigeon = pigeon;
             pigeonsHitThisRound++;
             UpdateHitDisplay();
