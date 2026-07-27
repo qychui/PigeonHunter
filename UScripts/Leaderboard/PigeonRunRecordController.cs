@@ -7,6 +7,8 @@ namespace PigeonHunt
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class PigeonRunRecordController : UdonSharpBehaviour
     {
+        private const string LeaderboardRootName = "Leaderboard GameObject PigeonHunt";
+
         public const int ModeA = 1;
         public const int ModeB = 2;
         public const int ModeC = 3;
@@ -33,6 +35,12 @@ namespace PigeonHunt
 
         [Header("Eligibility")]
         public bool leaderboardTestMode;
+
+        [Header("Persistence")]
+        public PigeonLeaderboardPersistence persistence;
+
+        [Header("Leaderboard Upload")]
+        public PigeonGlobalLeaderboardBridge leaderboardBridge;
 
         [Header("Runtime")]
         [SerializeField] private int runState;
@@ -65,6 +73,7 @@ namespace PigeonHunt
         public void Initialize(GameManager manager)
         {
             gameManager = manager;
+            RegisterLeaderboardSource();
         }
 
         private void Update()
@@ -119,6 +128,7 @@ namespace PigeonHunt
             }
 
             ResetRun();
+            RegisterLeaderboardSource();
             activeModeId = modeId;
             activeRulesetVersion = Mathf.Max(1, rulesetVersion);
             activeBuildVersion = Mathf.Max(1, buildVersion);
@@ -191,6 +201,20 @@ namespace PigeonHunt
             hasLiveResult = !string.IsNullOrEmpty(liveRunId);
             invalidReason = InvalidReasonNone;
             runState = RunStateFinalized;
+
+            if (hasLiveResult && persistence != null)
+            {
+                persistence.RecordRunResult(
+                    liveModeId,
+                    liveFinalScore,
+                    liveReachedRound,
+                    liveTotalHits,
+                    liveRulesetVersion,
+                    liveBuildVersion,
+                    liveRunId);
+            }
+
+            RegisterLeaderboardSource();
         }
 
         public void InvalidateRun(int reason)
@@ -238,6 +262,23 @@ namespace PigeonHunt
             return Networking.GetServerTimeInMilliseconds().ToString("x8") +
                    Mathf.Max(0, playerId).ToString("x8") +
                    runSequence.ToString("x8");
+        }
+
+        private void RegisterLeaderboardSource()
+        {
+            if (leaderboardBridge == null)
+            {
+                var leaderboardRoot = GameObject.Find(LeaderboardRootName);
+                if (leaderboardRoot != null)
+                {
+                    leaderboardBridge = leaderboardRoot.GetComponentInChildren<PigeonGlobalLeaderboardBridge>(true);
+                }
+            }
+
+            if (leaderboardBridge != null)
+            {
+                leaderboardBridge.RegisterRecordSource(persistence, this);
+            }
         }
 
         #endregion
